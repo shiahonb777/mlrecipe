@@ -74,6 +74,19 @@ torch-native fast path; the default pure-NumPy path is what runs today.
 
 ## Usage
 
+If you have an existing PEFT adapter (saved by `peft.PeftModel.save_pretrained()`),
+the fastest path is one command:
+
+```bash
+mlrecipe from-peft ./my_lora_dir --name medical-v1
+```
+
+That reads `adapter_config.json`, picks up `rank`, `lora_alpha`,
+`target_modules`, `fan_in_fan_out`, and the base model ref
+automatically, and stores everything in `.recipe/`.
+
+If you'd rather drive it explicitly:
+
 ```bash
 # Initialize a recipe repo in your fine-tune directory
 mlrecipe init
@@ -98,6 +111,18 @@ mlrecipe push alice/llama3-medical@v1
 mlrecipe clone alice/llama3-medical@v1
 cd llama3-medical
 mlrecipe materialize ./merged
+```
+
+### Python API
+
+```python
+from mlrecipe import from_peft, commit_from_peft, materialize, load_recipe
+
+# Build a recipe from a PEFT model in memory:
+recipe, adapter_bytes = from_peft(peft_model, base_ref="gpt2")
+
+# Or from a saved adapter directory, all in one call:
+recipe = commit_from_peft("./my_lora_dir", repo_dir=".", name="medical-v1")
 ```
 
 ## How it works
@@ -147,7 +172,8 @@ for non-default naming conventions.
       `merge_and_unload` (see `examples/gpt2_alpaca/`)
 - [x] `fan_in_fan_out` / Conv1D layouts (GPT-2 etc.)
 - [x] `push` / `clone` via GitHub Releases
-- [ ] PEFT integration: `mlrecipe.from_peft(model)` one-liner
+- [x] PEFT integration: `mlrecipe from-peft <dir>` and
+      `mlrecipe.from_peft()` / `mlrecipe.commit_from_peft()` Python API
 - [ ] Axolotl / unsloth presets
 - [ ] Recipe lineage: `mlrecipe log`, `mlrecipe parent`, `mlrecipe diff`
 - [ ] Quantized LoRA (QLoRA) support

@@ -247,6 +247,53 @@ def cmd_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_from_peft(args: argparse.Namespace) -> int:
+    """Build a recipe from a PEFT adapter directory in one call.
+
+    Reads adapter_config.json, picks rank/alpha/targets/fan_in_fan_out
+    automatically, and writes the recipe + content-addressed adapter
+    into the current repo (auto-creating one if needed).
+    """
+    from mlrecipe.peft_bridge import commit_from_peft_dir
+
+    try:
+        repo_dir = _find_repo(Path.cwd())
+        project_dir = repo_dir.parent
+    except FileNotFoundError:
+        # No existing repo: auto-init in cwd.
+        project_dir = Path.cwd()
+        (project_dir / ".recipe").mkdir(exist_ok=True)
+        (project_dir / ".recipe" / "artifacts").mkdir(exist_ok=True)
+
+    adapter_dir = Path(args.adapter_dir)
+    if not adapter_dir.is_dir():
+        _err(f"adapter directory not found: {adapter_dir}")
+        return 1
+
+    try:
+        recipe = commit_from_peft_dir(
+            adapter_dir,
+            project_dir,
+            base_ref=args.base,
+            revision=args.revision,
+            name=args.name,
+        )
+    except (FileNotFoundError, ValueError, NotImplementedError) as e:
+        _err(str(e))
+        return 1
+
+    print(f"recipe `{recipe.name}` committed to {project_dir / '.recipe'}/")
+    print(f"  base       : {recipe.base.ref}"
+          + (f"@{recipe.base.revision}" if recipe.base.revision else ""))
+    a = recipe.adapters[0]
+    print(f"  adapter    : {a.artifact[:24]}...  rank={a.rank} alpha={a.alpha}")
+    if a.target_modules:
+        print(f"  targets    : {a.target_modules}")
+    if a.extra.get("fan_in_fan_out"):
+        print("  layout     : fan_in_fan_out (Conv1D)")
+    return 0
+
+
 def cmd_clone(args: argparse.Namespace) -> int:
     """Pull a recipe from a GitHub Release into a fresh directory."""
     import subprocess
@@ -337,6 +384,18 @@ def build_parser() -> argparse.ArgumentParser:
                             help="push the recipe to a GitHub Release")
     p_push.add_argument("target", help="user/repo or user/repo@tag")
     p_push.set_defaults(func=cmd_push)
+
+    p_fp = sub.add_parser("from-peft",
+                          help="commit a recipe from an existing PEFT adapter directory")
+    p_fp.add_argument("adapter_dir",
+                      help="directory with adapter_config.json + adapter_model.{safetensors,bin}")
+    p_fp.add_argument("--name",
+                      help="recipe name (default: adapter directory's basename)")
+    p_fp.add_argument("--base",
+                      help="override base_model_name_or_path from adapter_config.json")
+    p_fp.add_argument("--revision",
+                      help="optional HF commit SHA to pin the base")
+    p_fp.set_defaults(func=cmd_from_peft)
 
     p_clone = sub.add_parser("clone", help="pull a recipe from a GitHub Release")
     p_clone.add_argument("target", help="user/repo or user/repo@tag")
