@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mlrecipe — Recipe Explorer</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #181b22;
+    --surface-2: #232733;
+    --text: #e8ebf2;
+    --muted: #9aa1ad;
+    --accent: #6ab0ff;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --border: #2a2f3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0 0 24px; color: var(--muted); }
+
+  .input-row { display: flex; gap: 8px; margin-bottom: 28px; }
+  input[type=text] {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font: inherit;
+  }
+  input[type=text]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  button {
+    padding: 10px 18px;
+    background: var(--accent);
+    color: #0f1115;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+
+  .examples {
+    color: var(--muted);
+    margin-bottom: 28px;
+    font-size: 13px;
+  }
+  .examples code {
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .examples code:hover { color: var(--accent); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    margin: 0 0 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { word-break: break-word; }
+
+  .size-bars { margin: 14px 0 6px; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0;
+  }
+  .bar-row .label { color: var(--muted); font-size: 13px; }
+  .bar-row .bar {
+    height: 22px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-row .bar > div {
+    height: 100%;
+    background: var(--accent);
+    transition: width .4s ease;
+  }
+  .bar-row .recipe-bar > div { background: var(--good); }
+  .bar-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ratio {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--good);
+  }
+  .ratio small {
+    display: block;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+
+  pre.toml {
+    background: var(--surface-2);
+    padding: 14px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+    white-space: pre;
+  }
+
+  .adapter {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin: 8px 0;
+  }
+  .adapter .head {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .adapter .meta {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .commands {
+    background: #000;
+    color: #c8e2c8;
+    padding: 14px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .commands .prompt { color: #6c757d; user-select: none; }
+  .commands .cmd { color: #fff; }
+
+  .error {
+    background: #2a1414;
+    border: 1px solid #5a2a2a;
+    color: #ffb3b3;
+    padding: 12px 14px;
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+
+  .footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .badge.ok { color: var(--good); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>mlrecipe — Recipe Explorer</h1>
+    <p>Inspect a published recipe. See what it points to, how big it is,
+       and what command rebuilds the merged checkpoint.</p>
+  </header>
+
+  <form id="form" class="input-row">
+    <input type="text" id="ref" placeholder="user/repo@tag (e.g. shiahonb777/gpt2-alpaca-recipe@v1)"
+           autocomplete="off" spellcheck="false">
+    <button type="submit" id="go">Inspect</button>
+  </form>
+
+  <div class="examples">
+    Try:
+    <code data-ref="shiahonb777/gpt2-alpaca-recipe@v1">shiahonb777/gpt2-alpaca-recipe@v1</code>
+    <code data-ref="shiahonb777/qwen2.5-1.5b-oasst-recipe@v1">shiahonb777/qwen2.5-1.5b-oasst-recipe@v1</code>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="footer">
+    <a href="https://github.com/shiahonb777/mlrecipe">github.com/shiahonb777/mlrecipe</a>
+    &nbsp;·&nbsp;
+    A recipe is a small text file (and a content-addressed adapter) that
+    tells you how to rebuild a fine-tuned model from a base + delta.
+    No new servers. No new accounts. GitHub releases host everything.
+  </div>
+</div>
+
+<script>
+  // ---------- minimal TOML parser ----------
+  // Handles the subset we emit: top-level keys, [section], [[array.section]],
+  // strings (basic), ints, floats, bools, arrays of strings.
+  function parseTOML(text) {
+    const lines = text.split(/\r?\n/);
+
+    // First, fold multi-line arrays/strings into single logical lines.
+    // Our emitter writes things like:
+    //   target_modules = [
+    //       "x",
+    //       "y",
+    //   ]
+    // We collapse that into one line before the main parse.
+    const folded = [];
+    let buf = null;
+    let bracketDepth = 0;
+    for (const raw of lines) {
+      if (buf !== null) {
+        buf += ' ' + raw;
+        for (const c of raw) {
+          if (c === '[') bracketDepth++;
+          else if (c === ']') bracketDepth--;
+        }
+        if (bracketDepth <= 0) { folded.push(buf); buf = null; bracketDepth = 0; }
+        continue;
+      }
+      const eq = raw.indexOf('=');
+      const lbr = raw.indexOf('[');
+      const rbr = raw.lastIndexOf(']');
+      if (eq >= 0 && lbr > eq) {
+        // value side starts an array; check if it closes on same line
+        let depth = 0;
+        let opened = false;
+        for (let i = lbr; i < raw.length; i++) {
+          if (raw[i] === '[') { depth++; opened = true; }
+          else if (raw[i] === ']') depth--;
+        }
+        if (opened && depth > 0) {
+          buf = raw;
+          bracketDepth = depth;
+          continue;
+        }
+      }
+      folded.push(raw);
+    }
+    if (buf !== null) folded.push(buf);
+
+    const root = {};
+    let cur = root;
+
+    function getOrMakeTable(obj, path) {
+      for (const p of path) {
+        if (!(p in obj)) obj[p] = {};
+        obj = obj[p];
+      }
+      return obj;
+    }
+
+    function parseValue(s) {
+      s = s.trim();
+      if (s.startsWith('"') && s.endsWith('"')) {
+        return JSON.parse(s);
+      }
+      if (s === 'true') return true;
+      if (s === 'false') return false;
+      if (s.startsWith('[') && s.endsWith(']')) {
+        const inner = s.slice(1, -1).trim();
+        if (!inner) return [];
+        const items = [];
+        let depth = 0, q = false, start = 0;
+        for (let i = 0; i <= inner.length; i++) {
+          const c = inner[i];
+          if (c === '"' && inner[i-1] !== '\\') q = !q;
+          if (!q && c === '[') depth++;
+          if (!q && c === ']') depth--;
+          if (!q && depth === 0 && (c === ',' || i === inner.length)) {
+            const tok = inner.slice(start, i).trim();
+            if (tok) items.push(parseValue(tok));
+            start = i + 1;
+          }
+        }
+        return items;
+      }
+      if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+      if (/^-?\d+\.\d+(e-?\d+)?$/i.test(s)) return parseFloat(s);
+      return s;
+    }
+
+    for (let raw of folded) {
+      const line = raw.split('#')[0].trim();
+      if (!line) continue;
+      if (line.startsWith('[[') && line.endsWith(']]')) {
+        const path = line.slice(2, -2).split('.').map(p => p.trim());
+        const parent = getOrMakeTable(root, path.slice(0, -1));
+        const last = path[path.length - 1];
+        if (!Array.isArray(parent[last])) parent[last] = [];
+        const entry = {};
+        parent[last].push(entry);
+        cur = entry;
+        continue;
+      }
+      if (line.startsWith('[') && line.endsWith(']') && !line.includes('=')) {
+        const path = line.slice(1, -1).split('.').map(p => p.trim());
+        cur = getOrMakeTable(root, path);
+        continue;
+      }
+      const eq = line.indexOf('=');
+      if (eq < 0) continue;
+      const key = line.slice(0, eq).trim();
+      const val = parseValue(line.slice(eq + 1));
+      cur[key] = val;
+    }
+    return root;
+  }
+
+  // ---------- helpers ----------
+  function fmt(n) {
+    if (n == null) return '?';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+  }
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  // Heuristic: estimate the merged checkpoint size from the base ref.
+  // We only have the recipe; without a network call we can't be precise.
+  // Hard-code a few common families; fall back to "?".
+  const BASE_SIZE_HINTS = {
+    'gpt2': 500e6,
+    'gpt2-medium': 1.5e9,
+    'gpt2-large': 3.1e9,
+    'distilgpt2': 330e6,
+    'meta-llama/Llama-3-8B': 16e9,
+    'meta-llama/Llama-3-8B-Instruct': 16e9,
+    'meta-llama/Meta-Llama-3-8B': 16e9,
+    'mistralai/Mistral-7B-v0.1': 14e9,
+    'Qwen/Qwen2.5-0.5B': 1e9,
+    'Qwen/Qwen2.5-1.5B': 3e9,
+    'Qwen/Qwen2.5-7B': 15e9,
+    'TinyLlama/TinyLlama-1.1B-Chat-v1.0': 2.2e9,
+  };
+  function estimateMergedSize(baseRef) {
+    if (!baseRef) return null;
+    if (BASE_SIZE_HINTS[baseRef]) return BASE_SIZE_HINTS[baseRef];
+    // try fuzzy: a key that's a prefix of baseRef
+    for (const [k, v] of Object.entries(BASE_SIZE_HINTS)) {
+      if (baseRef.startsWith(k)) return v;
+    }
+    return null;
+  }
+
+  // ---------- GitHub Releases API ----------
+  async function fetchRelease(repo, tag) {
+    const url = tag === 'latest'
+      ? `https://api.github.com/repos/${repo}/releases/latest`
+      : `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
+    const r = await fetch(url);
+    if (r.status === 404) {
+      throw new Error(`release not found: ${repo}@${tag}`);
+    }
+    if (!r.ok) {
+      throw new Error(`github api: ${r.status} ${r.statusText}`);
+    }
+    return r.json();
+  }
+
+  async function fetchTomlAsset(release) {
+    const tomlAsset = release.assets.find(a => a.name.endsWith('.toml'));
+    if (!tomlAsset) {
+      throw new Error('no .toml asset on this release; was it pushed by an older mlrecipe?');
+    }
+    const r = await fetch(tomlAsset.browser_download_url);
+    if (!r.ok) throw new Error(`fetch toml: ${r.status}`);
+    return r.text();
+  }
+
+  // ---------- render ----------
+  function renderRecipe(repo, tag, release, recipe) {
+    const bundleAsset = release.assets.find(a => a.name.endsWith('.tar.gz'));
+    const bundleSize = bundleAsset?.size ?? 0;
+
+    const recipeMeta = recipe.recipe || {};
+    const base = recipe.base || {};
+    const adapters = recipe.adapters || [];
+    const training = recipe.training || {};
+    const parents = recipe.parents || {};
+
+    const merged = estimateMergedSize(base.ref);
+    const ratio = merged && bundleSize ? Math.round(merged / bundleSize) : null;
+
+    const html = [];
+
+    // Header panel.
+    html.push(`
+      <div class="panel">
+        <h2>${escapeHTML(recipeMeta.name || 'recipe')}</h2>
+        <div class="kv">
+          <div class="k">format</div>      <div class="v">${escapeHTML(recipeMeta.version || '?')}</div>
+          <div class="k">base</div>        <div class="v">${escapeHTML(base.ref || '?')}${
+            base.revision ? '@' + escapeHTML(base.revision) : ''
+          }</div>
+          ${parents.parent ? `<div class="k">parent</div><div class="v">${escapeHTML(parents.parent)}</div>` : ''}
+          <div class="k">release</div>     <div class="v"><a href="https://github.com/${repo}/releases/tag/${tag}" target="_blank">${escapeHTML(repo)}@${escapeHTML(tag)}</a></div>
+          <div class="k">published</div>   <div class="v">${new Date(release.published_at || release.created_at).toLocaleString()}</div>
+        </div>
+      </div>
+    `);
+
+    // Size comparison panel.
+    if (bundleSize) {
+      const mergedKnown = merged != null;
+      const denom = Math.max(merged || bundleSize, bundleSize);
+      const recipePct = (bundleSize / denom) * 100;
+      const mergedPct = mergedKnown ? 100 : 0;
+      html.push(`
+        <div class="panel">
+          <h2>Size</h2>
+          <div class="size-bars">
+            <div class="bar-row">
+              <div class="label">recipe bundle</div>
+              <div class="bar recipe-bar"><div style="width: ${recipePct.toFixed(1)}%"></div></div>
+              <div class="num">${fmt(bundleSize)}</div>
+            </div>
+            ${mergedKnown ? `
+              <div class="bar-row">
+                <div class="label">merged checkpoint</div>
+                <div class="bar"><div style="width: ${mergedPct.toFixed(1)}%"></div></div>
+                <div class="num">~${fmt(merged)}</div>
+              </div>
+            ` : `
+              <div class="bar-row">
+                <div class="label">merged checkpoint</div>
+                <div class="bar"><div style="width: 100%; background: var(--surface-2)"></div></div>
+                <div class="num">unknown base size</div>
+              </div>
+            `}
+          </div>
+          ${ratio ? `<div class="ratio">${ratio}× <small>smaller than the merged checkpoint</small></div>` : ''}
+        </div>
+      `);
+    }
+
+    // Adapters panel.
+    if (adapters.length) {
+      html.push('<div class="panel"><h2>Adapters</h2>');
+      adapters.forEach((a, i) => {
+        html.push(`
+          <div class="adapter">
+            <div class="head">
+              <span>[${i}] ${escapeHTML(a.type || '?')}<span class="badge">${escapeHTML(a.artifact?.slice(0, 19) || '')}…</span></span>
+            </div>
+            <div class="meta">
+              ${a.rank != null ? `rank=${a.rank} ` : ''}
+              ${a.alpha != null ? `alpha=${a.alpha} ` : ''}
+              ${a.target_modules?.length ? `targets=[${a.target_modules.join(', ')}] ` : ''}
+              ${a.fan_in_fan_out ? '<span class="badge ok">Conv1D</span>' : ''}
+            </div>
+          </div>
+        `);
+      });
+      html.push('</div>');
+    }
+
+    // Training metadata.
+    const tKeys = Object.keys(training).filter(k => training[k] != null && training[k] !== '');
+    if (tKeys.length) {
+      html.push('<div class="panel"><h2>Training</h2><div class="kv">');
+      tKeys.forEach(k => {
+        html.push(`<div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(training[k]))}</div>`);
+      });
+      html.push('</div></div>');
+    }
+
+    // Commands.
+    html.push(`
+      <div class="panel">
+        <h2>Use it</h2>
+        <pre class="commands"><span class="prompt">$</span> <span class="cmd">pip install git+https://github.com/shiahonb777/mlrecipe.git</span>
+<span class="prompt">$</span> <span class="cmd">mlrecipe clone ${escapeHTML(repo)}@${escapeHTML(tag)}</span>
+<span class="prompt">$</span> <span class="cmd">cd ${escapeHTML(repo.split('/').pop())}</span>
+<span class="prompt">$</span> <span class="cmd">mlrecipe materialize ./merged</span></pre>
+      </div>
+    `);
+
+    document.getElementById('result').innerHTML = html.join('');
+  }
+
+  // ---------- entry ----------
+  async function inspect(refStr) {
+    const result = document.getElementById('result');
+    result.innerHTML = '<div class="panel"><div class="kv"><div class="k">loading…</div></div></div>';
+    let repo, tag;
+    if (refStr.includes('@')) {
+      [repo, tag] = refStr.split('@', 2);
+    } else {
+      repo = refStr; tag = 'latest';
+    }
+    if (!repo.includes('/')) {
+      result.innerHTML = `<div class="error">expected <code>user/repo</code> or <code>user/repo@tag</code></div>`;
+      return;
+    }
+    try {
+      const release = await fetchRelease(repo, tag);
+      const tomlText = await fetchTomlAsset(release);
+      const recipe = parseTOML(tomlText);
+      renderRecipe(repo, tag, release, recipe);
+    } catch (e) {
+      result.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
+    }
+  }
+
+  document.getElementById('form').addEventListener('submit', e => {
+    e.preventDefault();
+    const ref = document.getElementById('ref').value.trim();
+    if (ref) inspect(ref);
+  });
+  document.querySelectorAll('.examples code').forEach(c => {
+    c.addEventListener('click', () => {
+      const ref = c.dataset.ref;
+      document.getElementById('ref').value = ref;
+      inspect(ref);
+    });
+  });
+
+  // Auto-load if URL has ?ref=...
+  const urlRef = new URLSearchParams(location.search).get('ref');
+  if (urlRef) {
+    document.getElementById('ref').value = urlRef;
+    inspect(urlRef);
+  }
+</script>
+</body>
+</html>

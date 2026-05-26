@@ -221,19 +221,31 @@ def cmd_push(args: argparse.Namespace) -> int:
     size = bundle.stat().st_size
     print(f"bundle size: {size:,} bytes")
 
+    # Also expose just the recipe.toml as a separate, tiny asset so web
+    # tools (and humans) can read the structure without downloading the
+    # full bundle.
+    recipe_toml = repo_dir / "recipe.toml"
+    extra_asset = repo_dir.parent / f".recipe-{tag}.toml"
+    if recipe_toml.is_file():
+        import shutil
+        shutil.copy2(recipe_toml, extra_asset)
+
     # Use `gh` to create / attach.
     print(f"creating release {tag} on {repo}")
+    assets = [str(bundle)]
+    if extra_asset.exists():
+        assets.append(str(extra_asset))
     create = subprocess.run(
-        ["gh", "release", "create", tag, str(bundle),
+        ["gh", "release", "create", tag, *assets,
          "--repo", repo, "--title", tag,
          "--notes", f"recipe `{recipe.name}` (format {recipe.format_version})"],
         capture_output=True, text=True,
     )
     if create.returncode != 0:
-        # Maybe the release already exists; try uploading the asset.
+        # Maybe the release already exists; try uploading the assets.
         if "already exists" in (create.stderr or ""):
             up = subprocess.run(
-                ["gh", "release", "upload", tag, str(bundle),
+                ["gh", "release", "upload", tag, *assets,
                  "--repo", repo, "--clobber"],
                 capture_output=True, text=True,
             )
