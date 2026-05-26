@@ -97,12 +97,16 @@ def cmd_commit(args: argparse.Namespace) -> int:
             _err(f"adapter file not found: {adapter_path}")
             return 1
         h = store_artifact(repo_dir, adapter_path)
+        extra = {}
+        if args.fan_in_fan_out:
+            extra["fan_in_fan_out"] = True
         adapter = Adapter(
             type="lora",
             artifact=h,
             target_modules=args.target_modules or [],
             rank=args.rank,
             alpha=args.alpha,
+            extra=extra,
         )
         adapters.append(adapter)
 
@@ -130,6 +134,8 @@ def cmd_commit(args: argparse.Namespace) -> int:
 def cmd_show(args: argparse.Namespace) -> int:
     if args.path:
         repo_dir = Path(args.path)
+        if (repo_dir / ".recipe").is_dir() and not (repo_dir / "recipe.toml").is_file():
+            repo_dir = repo_dir / ".recipe"
     else:
         try:
             repo_dir = _find_repo(Path.cwd())
@@ -167,6 +173,9 @@ def cmd_materialize(args: argparse.Namespace) -> int:
     from mlrecipe.materialize import materialize
     if args.repo:
         repo_dir = Path(args.repo)
+        # Allow `--repo work/myproject` (parent of .recipe) or `--repo work/myproject/.recipe`.
+        if (repo_dir / ".recipe").is_dir() and not (repo_dir / "recipe.toml").is_file():
+            repo_dir = repo_dir / ".recipe"
     else:
         try:
             repo_dir = _find_repo(Path.cwd())
@@ -308,6 +317,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_commit.add_argument("--dataset-hash")
     p_commit.add_argument("--allow-empty", action="store_true",
                           help="allow a recipe with no adapter")
+    p_commit.add_argument("--fan-in-fan-out", action="store_true",
+                          help="set if base uses Conv1D-style (in,out) weights "
+                               "(GPT-2's c_attn etc.)")
     p_commit.set_defaults(func=cmd_commit)
 
     p_show = sub.add_parser("show", help="display the current recipe")

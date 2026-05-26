@@ -28,7 +28,7 @@ model the world already has. Today's tools (HF Hub, git-lfs) don't know
 that. They store and transfer the merged result, paying the full cost
 every time.
 
-`recipe` treats a fine-tune as a small program: `base + adapter + training
+`mlrecipe` treats a fine-tune as a small program: `base + adapter + training
 metadata`. The receiver runs the program locally and gets back the same
 weights. Storage and bandwidth drop ~1000x for LoRA-style fine-tunes.
 
@@ -36,11 +36,26 @@ weights. Storage and bandwidth drop ~1000x for LoRA-style fine-tunes.
 |---|---|
 | HF Hub (merged safetensors) | 14,000 MB |
 | `git-lfs` chunked dedup | ~2,000 MB |
-| `recipe` (LoRA-aware) | **~50 MB** |
+| `mlrecipe` (LoRA-aware) | **~50 MB** |
 
 (numbers from `research_pocs/apex2_weights_program/` — measured against
 toy models with realistic spectra; full-model fine-tunes still get ~5x via
 tensor-aware delta.)
+
+## Real example
+
+There's a working end-to-end demo in
+[`examples/gpt2_alpaca/`](examples/gpt2_alpaca/) that:
+
+- Downloads a real PEFT LoRA from HF Hub (`monsterapi/gpt2_alpaca-lora`)
+- Packages it as an `mlrecipe` (1.2 MB instead of 500 MB)
+- Materializes it into a merged GPT-2 checkpoint
+- Verifies the result is **bit-identical** to PEFT's official
+  `merge_and_unload` (148/148 tensors, max abs diff = 0.0)
+
+```bash
+bash examples/gpt2_alpaca/run.sh
+```
 
 ## Install
 
@@ -138,10 +153,13 @@ for non-default naming conventions.
 - [x] Recipe format v0.1, content-addressed artifacts
 - [x] LoRA application (PEFT-style key conventions)
 - [x] `init` / `commit` / `show` / `materialize`
+- [x] Real-world LoRA verification: bit-identical to PEFT
+      `merge_and_unload` (see `examples/gpt2_alpaca/`)
+- [x] `fan_in_fan_out` / Conv1D layouts (GPT-2 etc.)
 - [x] `push` / `clone` via GitHub Releases
-- [ ] PEFT integration: `recipe.from_peft(model)` one-liner
+- [ ] PEFT integration: `mlrecipe.from_peft(model)` one-liner
 - [ ] Axolotl / unsloth presets
-- [ ] Recipe lineage: `recipe log`, `recipe parent`, `recipe diff`
+- [ ] Recipe lineage: `mlrecipe log`, `mlrecipe parent`, `mlrecipe diff`
 - [ ] Quantized LoRA (QLoRA) support
 - [ ] Adapter types beyond LoRA: IA³, sparse delta, full-FT delta+quant
 - [ ] Web "Recipe Explorer" — paste a recipe URL, see lineage tree

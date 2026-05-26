@@ -102,17 +102,27 @@ def _apply_lora_to_tensor(
     lora_b: np.ndarray,
     alpha: float,
     rank: int,
+    fan_in_fan_out: bool = False,
 ) -> np.ndarray:
-    """Compute base + (alpha/rank) * (B @ A) and return same dtype as base.
+    """Compute base + (alpha/rank) * delta and return same dtype as base.
 
-    Shapes: base_w is (out, in); A is (rank, in); B is (out, rank).
-    PEFT uses the same convention.
+    Default convention (PyTorch nn.Linear):
+        A is (rank, in), B is (out, rank), base is (out, in).
+        delta = B @ A is (out, in), shape-matches base directly.
+
+    `fan_in_fan_out=True` (HuggingFace Conv1D, used in GPT-2's c_attn):
+        Base weight is stored as (in, out) instead of (out, in).
+        delta = (B @ A).T  to match base shape.
     """
     scaling = alpha / rank
-    delta = scaling * (lora_b.astype(np.float32) @ lora_a.astype(np.float32))
+    delta = lora_b.astype(np.float32) @ lora_a.astype(np.float32)
+    if fan_in_fan_out:
+        delta = delta.T
+    delta = scaling * delta
     if delta.shape != base_w.shape:
         raise ValueError(
-            f"LoRA delta shape {delta.shape} != base shape {base_w.shape}"
+            f"LoRA delta shape {delta.shape} != base shape {base_w.shape} "
+            f"(fan_in_fan_out={fan_in_fan_out})"
         )
     return (base_w.astype(np.float32) + delta).astype(base_w.dtype)
 
@@ -126,14 +136,18 @@ def _match_lora_targets(
 
     Returns a dict: base_key -> (lora_A_key, lora_B_key).
 
-    Matching strategy: a base key like
-        `model.layers.0.self_attn.q_proj.weight`
-    maps to
-        `base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight` etc.
-    PEFT prepends `base_model.model.` and replaces `.weight` with
-    `.lora_A.weight` / `.lora_B.weight`. We detect this by suffix matching.
+    PEFT's standard naming wraps the original model in `base_model.model.`,
+    so a base parameter `transformer.h.0.attn.c_attn.weight` becomes a LoRA
+    pair under root `base_model.model.transformer.h.0.attn.c_attn`. But
+    *which* prefix gets prepended depends on the wrapping model class.
+
+    We therefore match by suffix: strip the common `base_model.model.`
+    (or `base_model.`) prefix from the LoRA root, then look for any base
+    key that *ends* with the same suffix (allowing for the base to omit
+    one or more leading scopes the wrapper added).
     """
     pairs: dict[str, tuple[str, str]] = {}
+
     lora_a_by_root: dict[str, str] = {}
     lora_b_by_root: dict[str, str] = {}
     for lk in lora_keys:
@@ -144,25 +158,43 @@ def _match_lora_targets(
             root = lk[: -len(".lora_B.weight")]
             lora_b_by_root[root] = lk
 
-    # Pair LoRAs by root (e.g. "base_model.model.model.layers.0.self_attn.q_proj").
     for root, a_key in lora_a_by_root.items():
         b_key = lora_b_by_root.get(root)
         if b_key is None:
             continue
-        # Convert root -> base weight key by stripping the PEFT prefix.
-        base_root = root
+
+        # Strip the PEFT prefix wrapper (base_model.model. / base_model.).
+        bare = root
         for prefix in ("base_model.model.", "base_model."):
-            if base_root.startswith(prefix):
-                base_root = base_root[len(prefix):]
+            if bare.startswith(prefix):
+                bare = bare[len(prefix):]
                 break
-        base_key = base_root + ".weight"
-        # Filter by target_modules if specified.
+
+        # Filter by target_modules using the *last* path component.
         if target_modules:
-            mod_name = base_root.split(".")[-1]
+            mod_name = bare.split(".")[-1]
             if mod_name not in target_modules:
                 continue
-        if base_key in weight_keys:
-            pairs[base_key] = (a_key, b_key)
+
+        # Try exact match first: <bare>.weight in weight_keys?
+        candidate_exact = bare + ".weight"
+        match: Optional[str] = None
+        if candidate_exact in weight_keys:
+            match = candidate_exact
+        else:
+            # Suffix match. Walk leading scopes off `bare` and try each.
+            parts = bare.split(".")
+            for i in range(1, len(parts)):
+                suffix = ".".join(parts[i:]) + ".weight"
+                hits = [k for k in weight_keys if k.endswith(suffix)]
+                if len(hits) == 1:
+                    match = hits[0]
+                    break
+                if len(hits) > 1:
+                    # Ambiguous — go back to a more-specific suffix.
+                    continue
+        if match:
+            pairs[match] = (a_key, b_key)
     return pairs
 
 
@@ -185,6 +217,7 @@ def apply_lora_adapter(
     lora = _load_lora_weights(adapter_file)
     rank = adapter.rank or 0
     alpha = adapter.alpha if adapter.alpha is not None else float(rank)
+    fan_in_fan_out = bool(adapter.extra.get("fan_in_fan_out", False))
     if rank <= 0:
         # Try to infer rank from the first lora_A matrix.
         for k, v in lora.items():
@@ -217,7 +250,8 @@ def apply_lora_adapter(
                 if k in pairs:
                     a_key, b_key = pairs[k]
                     w = _apply_lora_to_tensor(w, lora[a_key], lora[b_key],
-                                              alpha=alpha, rank=rank)
+                                              alpha=alpha, rank=rank,
+                                              fan_in_fan_out=fan_in_fan_out)
                     modified += 1
                 new_state[k] = w
         out_shard = out_dir / shard.name
