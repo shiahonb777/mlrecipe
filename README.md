@@ -6,17 +6,17 @@ A 14 GB fine-tune becomes a 50 KB recipe + a tiny LoRA adapter. The
 receiver re-derives the merged checkpoint locally, bit-exactly.
 
 ```
-$ recipe push alice/llama3-medical
+$ mlrecipe push alice/llama3-medical
 bundling -> .recipe-bundle-v1.tar.gz
 bundle size: 53,712 bytes        ← not 14 GB
 pushed: https://github.com/alice/llama3-medical/releases/tag/v1
 
-$ recipe clone alice/llama3-medical
+$ mlrecipe clone alice/llama3-medical
 fetching alice/llama3-medical@latest
 unpacking...
 cloned recipe `llama3-medical` into llama3-medical/
 
-$ recipe materialize ./merged
+$ mlrecipe materialize ./merged
 materializing llama3-medical -> merged
 done. checkpoint at merged
 ```
@@ -61,7 +61,7 @@ The CLI is called `recipe`. (The PyPI package is `mlrecipe` because the
 shorter name is taken; the CLI is the user-facing brand.)
 
 ```bash
-recipe --help
+mlrecipe --help
 ```
 
 Requires Python 3.9+. The optional `[torch]` extra enables a future
@@ -71,10 +71,10 @@ torch-native fast path; the default pure-NumPy path is what runs today.
 
 ```bash
 # Initialize a recipe repo in your fine-tune directory
-recipe init
+mlrecipe init
 
 # Record a recipe pointing to a HF base model and a local LoRA adapter
-recipe commit \
+mlrecipe commit \
     --name medical-v1 \
     --base meta-llama/Llama-3-8B \
     --revision <hf-commit-sha> \
@@ -84,15 +84,15 @@ recipe commit \
     --seed 42 --steps 10000
 
 # Inspect
-recipe show
+mlrecipe show
 
 # Push to a GitHub Release (uses gh CLI; requires SSH or HTTPS auth)
-recipe push alice/llama3-medical@v1
+mlrecipe push alice/llama3-medical@v1
 
 # On any other machine:
-recipe clone alice/llama3-medical@v1
+mlrecipe clone alice/llama3-medical@v1
 cd llama3-medical
-recipe materialize ./merged
+mlrecipe materialize ./merged
 ```
 
 ## How it works

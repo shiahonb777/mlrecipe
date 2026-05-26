@@ -1,15 +1,15 @@
-"""`recipe` — command-line entry point.
+"""`mlrecipe` — command-line entry point.
 
 Subcommands:
-  recipe init                Create a .recipe/ directory in cwd.
-  recipe commit              Create a recipe from --base / --adapter inputs.
-  recipe show                Pretty-print a recipe.
-  recipe materialize         Apply a recipe to produce a merged checkpoint.
-  recipe push                Push a recipe to a GitHub Release.
-  recipe clone               Pull a recipe from a GitHub Release.
+  mlrecipe init                Create a .recipe/ directory in cwd.
+  mlrecipe commit              Create a recipe from --base / --adapter inputs.
+  mlrecipe show                Pretty-print a recipe.
+  mlrecipe materialize         Apply a recipe to produce a merged checkpoint.
+  mlrecipe push                Push a recipe to a GitHub Release.
+  mlrecipe clone               Pull a recipe from a GitHub Release.
 
 Design constraints:
-  - No required dependencies beyond what `recipe` itself needs.
+  - No required dependencies beyond what `mlrecipe` itself needs.
   - Friendly errors. The first time someone runs the wrong command we want
     them to know exactly what to fix.
   - Subcommands are flat; we don't nest beyond one level.
@@ -54,7 +54,7 @@ def _find_repo(start: Path) -> Path:
         if p.parent == p:
             raise FileNotFoundError(
                 "not a recipe repo (or any parent up to filesystem root). "
-                "run `recipe init` first."
+                "run `mlrecipe init` first."
             )
         p = p.parent
 
@@ -272,7 +272,7 @@ def cmd_clone(args: argparse.Namespace) -> int:
     bundle.unlink()
     recipe = load_recipe(out_dir / ".recipe")
     print(f"cloned recipe `{recipe.name}` into {out_dir}/")
-    print(f"to materialize: cd {out_dir} && recipe materialize ./merged")
+    print(f"to materialize: cd {out_dir} && mlrecipe materialize ./merged")
     return 0
 
 
@@ -281,7 +281,7 @@ def cmd_clone(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="recipe",
+        prog="mlrecipe",
         description="Ship model recipes, not weights.",
     )
     sub = p.add_subparsers(dest="command", required=True)

@@ -37,7 +37,7 @@ test = [
 ]
 
 [project.scripts]
-recipe = "mlrecipe.cli:main"
+mlrecipe = "mlrecipe.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/shiahonb777/mlrecipe"
