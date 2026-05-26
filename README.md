@@ -76,6 +76,15 @@ plus a 7-module rank-16 LoRA. Live distributable copy at
 Recipe is **74 MB**. Merged checkpoint is **~3 GB**. (~40x — the
 compression ratio depends on adapter-to-base size.)
 
+## Recipe Explorer (browser)
+
+Inspect any recipe — its base, adapter, training metadata, lineage —
+without installing anything:
+
+**https://shiahonb777.github.io/mlrecipe/**
+
+Paste a recipe TOML or load one of the live release URLs.
+
 ## Install
 
 ```bash
