@@ -87,6 +87,10 @@ def _load_lora_weights(artifact_file: Path) -> dict[str, np.ndarray]:
     Recognizes PEFT's standard naming: `<module>.lora_A.weight`,
     `<module>.lora_B.weight`. We don't impose a stricter schema here;
     we'll match by suffix during application.
+
+    Adapters typically use fp16/fp32 — both supported by NumPy. If we
+    ever encounter a bf16 LoRA we'll need the same torch fallback as
+    the base path; for now we assume float dtypes NumPy understands.
     """
     from safetensors import safe_open
     out: dict[str, np.ndarray] = {}
@@ -217,11 +221,16 @@ def apply_lora_adapter(
 ) -> int:
     """Apply a LoRA adapter to base safetensors files; write merged shards.
 
+    Reads the base via torch (so bfloat16 / float16 weights are handled
+    natively), keeps LoRA arithmetic in float32, and writes the merged
+    result back as safetensors with the original base dtype preserved.
+
     Returns the number of weights modified.
     """
-    from safetensors import safe_open
-    from safetensors.numpy import save_file
     import shutil
+    import torch
+    from safetensors import safe_open
+    from safetensors.torch import save_file as save_file_torch
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -230,7 +239,6 @@ def apply_lora_adapter(
     alpha = adapter.alpha if adapter.alpha is not None else float(rank)
     fan_in_fan_out = bool(adapter.extra.get("fan_in_fan_out", False))
     if rank <= 0:
-        # Try to infer rank from the first lora_A matrix.
         for k, v in lora.items():
             if k.endswith(".lora_A.weight"):
                 rank = v.shape[0]
@@ -251,24 +259,29 @@ def apply_lora_adapter(
     modified = 0
     shard_files = list_safetensors_files(base_dir)
     for shard in shard_files:
-        with safe_open(str(shard), framework="np") as f:
+        with safe_open(str(shard), framework="pt") as f:
             weight_keys = list(f.keys())
             pairs = _match_lora_targets(weight_keys, list(lora.keys()),
                                         adapter.target_modules)
-            new_state: dict[str, np.ndarray] = {}
+            new_state: dict[str, torch.Tensor] = {}
             for k in weight_keys:
                 w = f.get_tensor(k)
                 if k in pairs:
                     a_key, b_key = pairs[k]
-                    w = _apply_lora_to_tensor(w, lora[a_key], lora[b_key],
-                                              alpha=alpha, rank=rank,
-                                              fan_in_fan_out=fan_in_fan_out)
+                    w_np = _apply_lora_to_tensor(
+                        _torch_to_np_via_fp32(w),
+                        lora[a_key], lora[b_key],
+                        alpha=alpha, rank=rank,
+                        fan_in_fan_out=fan_in_fan_out,
+                    )
+                    # Move back to torch with the original dtype.
+                    w = torch.from_numpy(w_np).to(w.dtype)
                     modified += 1
-                new_state[k] = w
+                new_state[k] = w.contiguous()
         out_shard = out_dir / shard.name
-        save_file(new_state, str(out_shard))
+        save_file_torch(new_state, str(out_shard))
 
-    # Copy the index, if present (it still maps weight keys to shard names).
+    # Copy the index, if present.
     indexes = list(base_dir.glob("*.safetensors.index.json"))
     for idx in indexes:
         dst = out_dir / idx.name
@@ -276,6 +289,12 @@ def apply_lora_adapter(
             shutil.copy2(idx, dst)
 
     return modified
+
+
+def _torch_to_np_via_fp32(t):
+    """Convert a torch tensor (any dtype, including bf16) to a fp32 numpy
+    array. The downstream merge re-casts to the appropriate base dtype."""
+    return t.detach().to(dtype=__import__("torch").float32).cpu().numpy()
 
 
 # ---------- Top-level entry ----------

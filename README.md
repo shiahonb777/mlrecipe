@@ -69,6 +69,13 @@ mlrecipe materialize ./merged
 
 The recipe is **1.1 MB**. The merged checkpoint is **~500 MB**.
 
+A larger demo at LLM scale lives in
+[`examples/qwen_oasst/`](examples/qwen_oasst/) — Qwen2.5-1.5B (bf16)
+plus a 7-module rank-16 LoRA. Live distributable copy at
+[`shiahonb777/qwen2.5-1.5b-oasst-recipe@v1`](https://github.com/shiahonb777/qwen2.5-1.5b-oasst-recipe/releases/tag/v1).
+Recipe is **74 MB**. Merged checkpoint is **~3 GB**. (~40x — the
+compression ratio depends on adapter-to-base size.)
+
 ## Install
 
 ```bash
@@ -183,6 +190,7 @@ for non-default naming conventions.
 - [x] Real-world LoRA verification: bit-identical to PEFT
       `merge_and_unload` (see `examples/gpt2_alpaca/`)
 - [x] `fan_in_fan_out` / Conv1D layouts (GPT-2 etc.)
+- [x] bf16 / fp16 / fp32 base weights via torch read path
 - [x] `push` / `clone` via GitHub Releases
 - [x] PEFT integration: `mlrecipe from-peft <dir>` and
       `mlrecipe.from_peft()` / `mlrecipe.commit_from_peft()` Python API
