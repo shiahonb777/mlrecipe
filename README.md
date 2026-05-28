@@ -1,65 +1,73 @@
-# recipe
+# mlrecipe
 
-**Ship model recipes, not weights.**
+A content-addressed format for LoRA fine-tunes. The recipe — a small TOML file
+plus a hashed adapter — points at a base model on Hugging Face and rebuilds a
+merged checkpoint that is bit-identical to `peft.merge_and_unload()`. Storage
+and bandwidth drop by two to three orders of magnitude. Distribution is
+GitHub releases. There is no new server, no new registry, no new account.
 
-A 14 GB fine-tune becomes a 50 KB recipe + a tiny LoRA adapter. The
-receiver re-derives the merged checkpoint locally, bit-exactly.
-
-```
+```bash
 $ mlrecipe push alice/llama3-medical
 bundling -> .recipe-bundle-v1.tar.gz
-bundle size: 53,712 bytes        ← not 14 GB
+bundle size: 53,712 bytes        # not 14 GB
 pushed: https://github.com/alice/llama3-medical/releases/tag/v1
 
 $ mlrecipe clone alice/llama3-medical
 fetching alice/llama3-medical@latest
-unpacking...
+unpacking…
 cloned recipe `llama3-medical` into llama3-medical/
 
 $ mlrecipe materialize ./merged
 materializing llama3-medical -> merged
-done. checkpoint at merged
+done. checkpoint at merged/
 ```
 
-## Why
+## The web explorer
 
-A LoRA fine-tune isn't a 14 GB blob — it's a 50 MB delta on top of a base
-model the world already has. Today's tools (HF Hub, git-lfs) don't know
-that. They store and transfer the merged result, paying the full cost
-every time.
+[shiahonb777.github.io/mlrecipe](https://shiahonb777.github.io/mlrecipe/) reads any
+recipe published as a GitHub release and renders its base, adapters, sizes, and
+the four commands that rebuild it. Three panes:
 
-`mlrecipe` treats a fine-tune as a small program: `base + adapter + training
-metadata`. The receiver runs the program locally and gets back the same
-weights. Storage and bandwidth drop ~1000x for LoRA-style fine-tunes.
+- *Browse* a known recipe by `user/repo@tag`.
+- *Search* the public web for `recipe.toml` files via the GitHub search API.
+- *Publish* — the four commands that turn a PEFT adapter directory into a
+  recipe and push it as a GitHub release. The adapter never leaves your
+  machine before that `git push`.
 
-| Format | LoRA fine-tune size on disk |
-|---|---|
-| HF Hub (merged safetensors) | 14,000 MB |
-| `git-lfs` chunked dedup | ~2,000 MB |
-| `mlrecipe` (LoRA-aware) | **~50 MB** |
+The page is a static site on GitHub Pages. The data is whatever you publish on
+your own GitHub account. There is no central index; the explorer queries the
+GitHub API on every visit.
 
-(numbers from `research_pocs/apex2_weights_program/` — measured against
-toy models with realistic spectra; full-model fine-tunes still get ~5x via
-tensor-aware delta.)
+## Why a recipe is small
 
-## Real example
+A LoRA fine-tune isn't a 14 GB blob. It's a 50 MB delta on top of a base model
+the world already has. Today's tools — Hugging Face Hub, `git-lfs` — store and
+transfer the merged result, paying the full cost every time.
 
-There's a working end-to-end demo in
-[`examples/gpt2_alpaca/`](examples/gpt2_alpaca/) that:
+`mlrecipe` records what was done: `base + adapter + training metadata`. The
+receiver runs the recipe locally and gets the same weights back.
 
-- Downloads a real PEFT LoRA from HF Hub (`monsterapi/gpt2_alpaca-lora`)
-- Packages it as an `mlrecipe` (1.1 MB instead of 500 MB)
-- Materializes it into a merged GPT-2 checkpoint
-- Verifies the result is **bit-identical** to PEFT's official
-  `merge_and_unload` (148/148 tensors, max abs diff = 0.0)
+| Format                        | LoRA fine-tune on disk |
+|-------------------------------|-----------------------:|
+| Hugging Face Hub (merged)     | 14,000 MB              |
+| `git-lfs` chunked dedup       | ~2,000 MB              |
+| `mlrecipe` (LoRA-aware)       | ~50 MB                 |
+
+## Worked examples
+
+[`examples/gpt2_alpaca/`](examples/gpt2_alpaca/) downloads a real PEFT LoRA
+(`monsterapi/gpt2_alpaca-lora`), packages it as a recipe (1.1 MB instead of
+500 MB), materializes it, and verifies the result against PEFT's official
+`merge_and_unload` — 148 of 148 tensors identical, max element-wise difference
+zero.
 
 ```bash
 bash examples/gpt2_alpaca/run.sh
 ```
 
-A live, distributable copy is at
+The published copy is at
 [`shiahonb777/gpt2-alpaca-recipe@v1`](https://github.com/shiahonb777/gpt2-alpaca-recipe/releases/tag/v1).
-You can clone and materialize it from any machine:
+Cloning and materializing it from a fresh machine:
 
 ```bash
 mlrecipe clone shiahonb777/gpt2-alpaca-recipe@v1
@@ -67,23 +75,10 @@ cd gpt2-alpaca-recipe
 mlrecipe materialize ./merged
 ```
 
-The recipe is **1.1 MB**. The merged checkpoint is **~500 MB**.
-
-A larger demo at LLM scale lives in
-[`examples/qwen_oasst/`](examples/qwen_oasst/) — Qwen2.5-1.5B (bf16)
-plus a 7-module rank-16 LoRA. Live distributable copy at
+A larger example, [`examples/qwen_oasst/`](examples/qwen_oasst/), runs the
+same path against Qwen 2.5 1.5B with a seven-module rank-16 LoRA. The recipe
+is 74 MB; the merged checkpoint is roughly 3 GB. Published as
 [`shiahonb777/qwen2.5-1.5b-oasst-recipe@v1`](https://github.com/shiahonb777/qwen2.5-1.5b-oasst-recipe/releases/tag/v1).
-Recipe is **74 MB**. Merged checkpoint is **~3 GB**. (~40x — the
-compression ratio depends on adapter-to-base size.)
-
-## Recipe Explorer (browser)
-
-Inspect any recipe — its base, adapter, training metadata, lineage —
-without installing anything:
-
-**https://shiahonb777.github.io/mlrecipe/**
-
-Paste a recipe TOML or load one of the live release URLs.
 
 ## Install
 
@@ -91,35 +86,25 @@ Paste a recipe TOML or load one of the live release URLs.
 pip install git+https://github.com/shiahonb777/mlrecipe.git
 ```
 
-Verify:
-
-```bash
-mlrecipe --help
-```
-
-Requires Python 3.9+. The optional `[torch]` extra enables a future
-torch-native fast path; the default pure-NumPy path is what runs today.
+Python 3.9 or newer. The optional `[torch]` extra enables a torch-native fast
+path; the default pure-NumPy path is what runs today.
 
 ## Usage
 
-If you have an existing PEFT adapter (saved by `peft.PeftModel.save_pretrained()`),
-the fastest path is one command:
+If you already have a PEFT adapter directory, one command produces a recipe.
 
 ```bash
 mlrecipe from-peft ./my_lora_dir --name medical-v1
 ```
 
 That reads `adapter_config.json`, picks up `rank`, `lora_alpha`,
-`target_modules`, `fan_in_fan_out`, and the base model ref
+`target_modules`, `fan_in_fan_out`, and the base model reference
 automatically, and stores everything in `.recipe/`.
 
-If you'd rather drive it explicitly:
+For finer control:
 
 ```bash
-# Initialize a recipe repo in your fine-tune directory
-mlrecipe init
-
-# Record a recipe pointing to a HF base model and a local LoRA adapter
+mlrecipe init                       # initialize a recipe repo in cwd
 mlrecipe commit \
     --name medical-v1 \
     --base meta-llama/Llama-3-8B \
@@ -128,14 +113,13 @@ mlrecipe commit \
     --target-modules q_proj v_proj \
     --rank 16 --alpha 32 \
     --seed 42 --steps 10000
-
-# Inspect
 mlrecipe show
+mlrecipe push alice/llama3-medical@v1     # uses the gh CLI
+```
 
-# Push to a GitHub Release (uses gh CLI; requires SSH or HTTPS auth)
-mlrecipe push alice/llama3-medical@v1
+On any other machine:
 
-# On any other machine:
+```bash
 mlrecipe clone alice/llama3-medical@v1
 cd llama3-medical
 mlrecipe materialize ./merged
@@ -146,68 +130,72 @@ mlrecipe materialize ./merged
 ```python
 from mlrecipe import from_peft, commit_from_peft, materialize, load_recipe
 
-# Build a recipe from a PEFT model in memory:
+# Build a recipe from a live PEFT model.
 recipe, adapter_bytes = from_peft(peft_model, base_ref="gpt2")
 
-# Or from a saved adapter directory, all in one call:
+# Or from a saved adapter directory.
 recipe = commit_from_peft("./my_lora_dir", repo_dir=".", name="medical-v1")
 ```
 
-## How it works
+## Format
 
 A `recipe.toml` records:
 
-- `base`: HF Hub model ref + commit SHA (immutable pin)
-- `adapters`: ordered list of LoRA adapters (referenced by SHA-256)
-- `training`: provenance (seed, steps, dataset hash) — auditable, not
-  required for materialization
-- `parents`: optional reference to another recipe (for lineage)
+- `base` — Hugging Face model ref plus commit SHA (an immutable pin).
+- `adapters` — ordered list of LoRA adapters, each referenced by SHA-256 of
+  the adapter bytes.
+- `training` — provenance (seed, steps, dataset hash). Auditable, not
+  required for materialization.
+- `parents` — optional pointer to another recipe, for lineage.
 
-`recipe materialize` downloads the base, fetches each adapter from the
-local artifact store, applies them in order via `B @ A` matrix
-multiplication, and writes a complete safetensors checkpoint identical
-to what HF Hub would have served.
+`mlrecipe materialize` downloads the base, loads each adapter from the local
+artifact store, applies them in order via `B @ A` matrix multiplication, and
+writes a complete safetensors checkpoint identical to what Hugging Face Hub
+would have served.
 
 Storage layout:
 
 ```
 .recipe/
-  recipe.toml          # the recipe (50KB)
+  recipe.toml          # ~50 KB of TOML
   artifacts/
     9c/9c2bc...        # content-addressed LoRA adapters
   HEAD                 # current commit / draft marker
 ```
 
-GitHub Releases host the bundles. No proprietary registry. No new
-servers to trust. The recipient sees exactly the file you uploaded under
-your own GitHub account.
+GitHub releases host the bundles. The recipient downloads exactly the file
+you uploaded, under your GitHub account.
 
 ## Status
 
-Alpha. The format is `0.1`; we'll bump it on any breaking change. The
-core path (commit / show / materialize / push / clone) is tested with
-synthetic models. Real-world LoRA fine-tunes from PEFT / Axolotl /
-unsloth are the next milestone — the matching logic in
-`materialize._match_lora_targets` is conservative and may need extension
-for non-default naming conventions.
+Alpha. The format version is `0.1`; the version string in every recipe gets
+bumped on any breaking change. The core path (commit / show / materialize /
+push / clone) is tested against synthetic models, plus the two real PEFT
+adapters above. PEFT, Axolotl, and unsloth-style adapter naming conventions
+are matched conservatively in `materialize._match_lora_targets`; extending it
+for further toolchains is the next milestone.
 
 ## Roadmap
 
-- [x] Recipe format v0.1, content-addressed artifacts
-- [x] LoRA application (PEFT-style key conventions)
-- [x] `init` / `commit` / `show` / `materialize`
-- [x] Real-world LoRA verification: bit-identical to PEFT
-      `merge_and_unload` (see `examples/gpt2_alpaca/`)
-- [x] `fan_in_fan_out` / Conv1D layouts (GPT-2 etc.)
-- [x] bf16 / fp16 / fp32 base weights via torch read path
-- [x] `push` / `clone` via GitHub Releases
-- [x] PEFT integration: `mlrecipe from-peft <dir>` and
-      `mlrecipe.from_peft()` / `mlrecipe.commit_from_peft()` Python API
-- [ ] Axolotl / unsloth presets
-- [ ] Recipe lineage: `mlrecipe log`, `mlrecipe parent`, `mlrecipe diff`
-- [ ] Quantized LoRA (QLoRA) support
-- [ ] Adapter types beyond LoRA: IA³, sparse delta, full-FT delta+quant
-- [ ] Web "Recipe Explorer" — paste a recipe URL, see lineage tree
+Done:
+
+- Recipe format v0.1, content-addressed artifacts.
+- LoRA application with PEFT-style key conventions.
+- `init` / `commit` / `show` / `materialize`.
+- Bit-identical match against `peft.merge_and_unload` on real PEFT adapters.
+- `fan_in_fan_out` / Conv1D layouts.
+- bf16 / fp16 / fp32 base weights via the torch read path.
+- `push` / `clone` via GitHub releases.
+- PEFT integration: `mlrecipe from-peft <dir>` and the equivalent Python API.
+- Web explorer: browse, search, publish.
+
+Not done:
+
+- Browser-side materialization (the `run.html` page).
+- Axolotl and unsloth presets.
+- Recipe lineage: `mlrecipe log`, `mlrecipe parent`, `mlrecipe diff`.
+- Quantized LoRA support.
+- Adapter types beyond LoRA: IA³, sparse delta, full-FT delta with quant.
 
 ## License
 

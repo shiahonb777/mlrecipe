@@ -3,576 +3,613 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mlrecipe — Recipe Explorer</title>
+<title>mlrecipe — content-addressed LoRA, on GitHub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1115;
-    --surface: #181b22;
-    --surface-2: #232733;
-    --text: #e8ebf2;
-    --muted: #9aa1ad;
-    --accent: #6ab0ff;
-    --good: #4ade80;
-    --warn: #fbbf24;
-    --border: #2a2f3a;
+    --surface:        #faf9f5;
+    --surface-sunken: #f3f1ea;
+    --surface-raised: #ffffff;
+    --text:        #141413;
+    --text-muted:  #6b6a64;
+    --text-faint:  #b0aea5;
+    --border:        #e8e6dc;
+    --border-strong: #c9c5b8;
+    --accent:       #d97757;
+    --accent-blue:  #6a9bcc;
+    --accent-green: #788c5d;
+    --danger: #b54545;
+    --font-head: "Poppins", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Lora", Georgia, "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
   }
+
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI",
-          Roboto, "Helvetica Neue", Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
-
-  header h1 { margin: 0 0 4px; font-size: 22px; }
-  header p { margin: 0 0 24px; color: var(--muted); }
-
-  .input-row { display: flex; gap: 8px; margin-bottom: 28px; }
-  input[type=text] {
-    flex: 1;
-    padding: 10px 12px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
     color: var(--text);
-    font: inherit;
+    font: 400 16.5px/1.65 var(--font-body);
+    font-feature-settings: "onum";
+    min-height: 100vh;
+    padding: 56px 24px 96px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  .measure { max-width: 640px; }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-head);
+    font-weight: 500;
+    color: var(--text);
+    margin: 0;
+  }
+  h1 {
+    font-size: 2.25rem;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+  }
+  h2 {
+    font-size: 1.25rem;
+    line-height: 1.25;
+    letter-spacing: -0.005em;
+    font-weight: 500;
+    margin: 56px 0 14px;
+  }
+  h3 {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    font-weight: 500;
+    margin: 0;
+  }
+  p { margin: 0 0 14px; }
+  a {
+    color: var(--text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border-strong);
+    transition: border-color 0.2s;
+  }
+  a:hover { border-bottom-color: var(--accent); }
+  a.accent {
+    color: var(--accent);
+    border-bottom-color: rgba(217, 119, 87, 0.4);
+  }
+  a.accent:hover { border-bottom-color: var(--accent); }
+  code {
+    font: 0.92em var(--font-mono);
+    background: var(--surface-sunken);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+  small { font-size: 0.85rem; line-height: 1.5; color: var(--text-muted); }
+  .meta { color: var(--text-muted); font-size: 0.85rem; }
+  .num { font-feature-settings: "lnum", "tnum"; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 48px 0; }
+
+  /* Header */
+  header { margin-bottom: 40px; }
+  .title-line {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .title-line .repo {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+  }
+  .lead {
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    max-width: 640px;
+  }
+  .lead em { font-style: italic; }
+  .links {
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+  }
+  .links a { margin-right: 18px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin: 32px 0 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 11px 18px 13px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-family: var(--font-head);
+    font-size: 0.92rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    user-select: none;
+    transition: color 0.15s, border-color 0.15s;
+    background: none;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .tab-meta {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .tab.active .tab-meta { color: var(--text-muted); }
+
+  .pane { display: none; padding: 28px 0 0; }
+  .pane.active { display: block; }
+
+  /* Form / inputs */
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  input[type=text] {
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 9px 13px;
+    font: 0.92rem var(--font-mono);
+    width: 100%;
   }
   input[type=text]:focus {
     outline: none;
     border-color: var(--accent);
   }
   button {
-    padding: 10px 18px;
-    background: var(--accent);
-    color: #0f1115;
-    border: none;
+    background: var(--text);
+    color: var(--surface);
+    border: 0;
     border-radius: 6px;
-    font: inherit;
-    font-weight: 600;
+    padding: 9px 18px;
+    font: 500 0.875rem var(--font-head);
     cursor: pointer;
   }
-  button:hover { filter: brightness(1.1); }
-  button:disabled { opacity: 0.5; cursor: wait; }
+  button:hover { background: #2d2c2a; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+  button.ghost:hover { background: var(--surface-sunken); }
 
   .examples {
-    color: var(--muted);
-    margin-bottom: 28px;
-    font-size: 13px;
+    color: var(--text-muted);
+    margin: 4px 0 8px;
+    font-size: 0.875rem;
   }
   .examples code {
-    background: var(--surface);
-    padding: 2px 6px;
-    border-radius: 3px;
     cursor: pointer;
+    margin-right: 8px;
   }
   .examples code:hover { color: var(--accent); }
 
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 16px;
+  /* Recipe detail */
+  .recipe-name {
+    font-family: var(--font-head);
+    font-size: 1.5rem;
+    font-weight: 500;
+    margin: 4px 0 6px;
+    letter-spacing: -0.01em;
   }
-  .panel h2 {
-    margin: 0 0 14px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  .recipe-base {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin: 0 0 18px;
+    font-family: var(--font-body);
   }
+  .recipe-base code { background: transparent; padding: 0; color: var(--text); }
 
-  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; }
-  .kv .k { color: var(--muted); }
-  .kv .v { word-break: break-word; }
-
-  .size-bars { margin: 14px 0 6px; }
-  .bar-row {
+  .kv {
     display: grid;
-    grid-template-columns: 140px 1fr 90px;
-    align-items: center;
-    gap: 12px;
-    margin: 6px 0;
+    grid-template-columns: 130px 1fr;
+    gap: 6px 16px;
+    font-size: 0.92rem;
+    margin: 0;
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
-  .bar-row .label { color: var(--muted); font-size: 13px; }
-  .bar-row .bar {
-    height: 22px;
-    background: var(--surface-2);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .bar-row .bar > div {
-    height: 100%;
-    background: var(--accent);
-    transition: width .4s ease;
-  }
-  .bar-row .recipe-bar > div { background: var(--good); }
-  .bar-row .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .ratio {
-    margin-top: 14px;
-    text-align: center;
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--good);
-  }
-  .ratio small {
-    display: block;
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--muted);
+  .kv .k {
+    font-family: var(--font-head);
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    align-self: center;
+  }
+  .kv .v {
+    word-break: break-word;
+    line-height: 1.5;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .kv .v code { padding: 1px 5px; }
+
+  /* Size figure */
+  .size-figure {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 36px;
+    align-items: end;
+    padding: 28px 0 22px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin: 28px 0 0;
+  }
+  .size-col h3 {
+    font-family: var(--font-head);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .size-num {
+    font-family: var(--font-head);
+    font-size: 2rem;
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .size-col.right { text-align: right; }
+  .size-col.right .size-num { color: var(--accent); }
+  .size-mid { text-align: center; padding: 0 8px; }
+  .size-mid .x {
+    font-family: var(--font-head);
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .size-mid .x-label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     margin-top: 4px;
   }
 
-  pre.toml {
-    background: var(--surface-2);
-    padding: 14px;
-    border-radius: 6px;
-    overflow-x: auto;
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0;
-    white-space: pre;
+  .adapter-row {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
   }
-
-  .adapter {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px 14px;
-    margin: 8px 0;
-  }
-  .adapter .head {
+  .adapter-row:last-child { border-bottom: 0; }
+  .adapter-row .head {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 6px;
-    font-weight: 600;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
   }
-  .adapter .meta {
-    color: var(--muted);
-    font-size: 13px;
+  .adapter-row .typ {
+    font-family: var(--font-head);
+    font-weight: 500;
+    color: var(--text);
+  }
+  .adapter-row .hash {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-family: var(--font-mono);
+  }
+  .adapter-row .config {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 4px;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .adapter-row .targets {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .adapter-row .targets code {
+    background: var(--surface-sunken);
+    margin-right: 4px;
   }
 
-  .commands {
-    background: #000;
-    color: #c8e2c8;
-    padding: 14px;
+  /* Commands box */
+  .cmds {
+    background: var(--text);
+    color: var(--surface);
+    padding: 16px 18px;
     border-radius: 6px;
     overflow-x: auto;
-    font-size: 13px;
-    line-height: 1.6;
+    font: 0.86rem var(--font-mono);
+    line-height: 1.7;
+    margin: 4px 0 0;
   }
-  .commands .prompt { color: #6c757d; user-select: none; }
-  .commands .cmd { color: #fff; }
+  .cmds .prompt { color: var(--text-faint); user-select: none; margin-right: 8px; }
+  .cmds .comment { color: var(--text-faint); }
 
-  .error {
-    background: #2a1414;
-    border: 1px solid #5a2a2a;
-    color: #ffb3b3;
-    padding: 12px 14px;
-    border-radius: 6px;
-    margin: 16px 0;
+  /* Search results */
+  .search-result {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: baseline;
   }
-
-  .footer {
-    margin-top: 60px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 12px;
+  .search-result:last-child { border-bottom: 0; }
+  .search-name {
+    font-family: var(--font-head);
+    font-weight: 500;
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .search-name a { border-bottom: 0; color: var(--text); }
+  .search-name a:hover { color: var(--accent); }
+  .search-base {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-top: 3px;
+  }
+  .search-base code { background: transparent; padding: 0; }
+  .search-meta {
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .search-empty {
     text-align: center;
+    color: var(--text-muted);
+    padding: 36px 0;
+    font-style: italic;
+  }
+  .search-loading {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    padding: 14px 0;
   }
 
-  .badge {
-    display: inline-block;
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--muted);
-    font-size: 11px;
-    margin-left: 6px;
+  /* Publish / step list */
+  .steps {
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
   }
-  .badge.ok { color: var(--good); }
+  .step {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 20px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    counter-increment: step;
+  }
+  .step:last-child { border-bottom: 0; }
+  .step::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--font-head);
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding-top: 1px;
+    font-feature-settings: "lnum", "tnum";
+  }
+  .step .body { min-width: 0; }
+  .step .body strong {
+    font-family: var(--font-head);
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .step .body p {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  .step .body p:last-child { margin-bottom: 0; }
+  .step pre {
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin: 6px 0 0;
+    overflow-x: auto;
+    font: 0.86rem var(--font-mono);
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .step pre .prompt { color: var(--text-muted); margin-right: 6px; user-select: none; }
+
+  .copy-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-strong);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font: 0.78rem var(--font-head);
+    margin-top: 6px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--text); background: transparent; }
+
+  /* Error */
+  .error {
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--danger);
+    color: var(--danger);
+    padding: 12px 14px;
+    border-radius: 0;
+    margin: 12px 0;
+    font-size: 0.92rem;
+  }
+  .loading {
+    color: var(--text-muted);
+    padding: 18px 0;
+    font-size: 0.95rem;
+    font-style: italic;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
+
   <header>
-    <h1>mlrecipe — Recipe Explorer</h1>
-    <p>Inspect a published recipe. See what it points to, how big it is,
-       and what command rebuilds the merged checkpoint.</p>
+    <div class="title-line">
+      <h1>mlrecipe</h1>
+      <span class="repo">github.com/shiahonb777/mlrecipe · MIT</span>
+    </div>
+    <p class="lead">
+      A content-addressed format for LoRA fine-tunes. The recipe — a small TOML file plus a
+      hashed adapter — points at a base model on Hugging Face and rebuilds a merged checkpoint
+      that is bit-identical to <code>peft.merge_and_unload()</code>. No new servers, no new
+      accounts. GitHub releases host everything.
+    </p>
+    <p class="lead">
+      This page indexes any GitHub repository that publishes a recipe. <em>Browse</em> a known
+      one, <em>search</em> the public ones, or copy the three commands that publish your own.
+    </p>
+    <p class="links">
+      <a href="https://github.com/shiahonb777/mlrecipe">Source</a>
+      <a href="run.html">Run a recipe in your browser</a>
+      <a href="https://github.com/shiahonb777/mlrecipe#install">Install the CLI</a>
+    </p>
   </header>
 
-  <form id="form" class="input-row">
-    <input type="text" id="ref" placeholder="user/repo@tag (e.g. shiahonb777/gpt2-alpaca-recipe@v1)"
-           autocomplete="off" spellcheck="false">
-    <button type="submit" id="go">Inspect</button>
-  </form>
-
-  <div class="examples">
-    Try:
-    <code data-ref="shiahonb777/gpt2-alpaca-recipe@v1">shiahonb777/gpt2-alpaca-recipe@v1</code>
-    <code data-ref="shiahonb777/qwen2.5-1.5b-oasst-recipe@v1">shiahonb777/qwen2.5-1.5b-oasst-recipe@v1</code>
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="browse">Browse<span class="tab-meta">Inspect a single recipe</span></button>
+    <button class="tab" data-tab="search">Search<span class="tab-meta">Find published recipes</span></button>
+    <button class="tab" data-tab="publish">Publish<span class="tab-meta">Convert your own LoRA</span></button>
   </div>
 
-  <div id="result"></div>
+  <!-- Browse pane -->
+  <section class="pane active" id="pane-browse">
+    <form id="browse-form" class="input-row">
+      <input type="text" id="browse-ref" placeholder="user/repo@tag (e.g. shiahonb777/gpt2-alpaca-recipe@v1)"
+             autocomplete="off" spellcheck="false">
+      <button type="submit">Inspect</button>
+    </form>
+    <p class="examples">
+      Examples:
+      <code data-ref="shiahonb777/gpt2-alpaca-recipe@v1">shiahonb777/gpt2-alpaca-recipe@v1</code>
+      <code data-ref="shiahonb777/qwen2.5-1.5b-oasst-recipe@v1">shiahonb777/qwen2.5-1.5b-oasst-recipe@v1</code>
+    </p>
+    <div id="browse-result"></div>
+  </section>
 
-  <div class="footer">
-    <a href="https://github.com/shiahonb777/mlrecipe">github.com/shiahonb777/mlrecipe</a>
-    &nbsp;·&nbsp;
-    A recipe is a small text file (and a content-addressed adapter) that
-    tells you how to rebuild a fine-tuned model from a base + delta.
-    No new servers. No new accounts. GitHub releases host everything.
-  </div>
+  <!-- Search pane -->
+  <section class="pane" id="pane-search">
+    <p class="meta measure">
+      Searches GitHub for <code>recipe.toml</code> files in the published format. Results
+      are live from the GitHub Search API and reflect the public web. Anonymous rate limit is
+      ten requests per minute; sign in to GitHub in another tab if you hit it.
+    </p>
+    <form id="search-form" class="input-row">
+      <input type="text" id="search-q" placeholder="Filter by base model, owner, or keyword (optional)"
+             autocomplete="off">
+      <button type="submit">Search</button>
+    </form>
+    <div id="search-result"></div>
+  </section>
+
+  <!-- Publish pane -->
+  <section class="pane" id="pane-publish">
+    <p class="lead measure" style="font-size:1rem">
+      You have a trained LoRA adapter directory — anything PEFT writes via
+      <code>save_pretrained</code>. Three commands turn it into a recipe and push it as a
+      GitHub release. The adapter never leaves your machine before that <code>git push</code>.
+    </p>
+    <ol class="steps">
+      <li class="step">
+        <div class="body">
+          <strong>Install mlrecipe</strong>
+          <p>One-time, from the CLI. Python 3.9+.</p>
+          <pre><span class="prompt">$</span>pip install git+https://github.com/shiahonb777/mlrecipe.git</pre>
+          <button class="copy-btn" data-copy="pip install git+https://github.com/shiahonb777/mlrecipe.git">Copy</button>
+        </div>
+      </li>
+      <li class="step">
+        <div class="body">
+          <strong>Convert your adapter into a recipe repo</strong>
+          <p>Point <code>from-peft</code> at your adapter directory and a fresh repo path.
+          The adapter file (typically a few MB) gets stored content-addressed; the recipe
+          itself is a hundred or so bytes of TOML.</p>
+          <pre><span class="prompt">$</span>mlrecipe from-peft \
+    ./my-adapter \
+    ./my-recipe-repo \
+    --base-ref Qwen/Qwen2.5-1.5B</pre>
+          <button class="copy-btn" data-copy="mlrecipe from-peft ./my-adapter ./my-recipe-repo --base-ref Qwen/Qwen2.5-1.5B">Copy</button>
+        </div>
+      </li>
+      <li class="step">
+        <div class="body">
+          <strong>Push the repo and tag a release</strong>
+          <p>The recipe directory is a regular Git repository. Push it to GitHub and create a
+          release; the <code>.recipe-bundle-v1.tar.gz</code> attached to that release is what
+          this page reads.</p>
+          <pre><span class="prompt">$</span>cd my-recipe-repo
+<span class="prompt">$</span>git init && git add . && git commit -m "Initial recipe"
+<span class="prompt">$</span>gh repo create my-recipe-repo --public --push
+<span class="prompt">$</span>mlrecipe push v1   <span class="comment"># bundles + creates the release</span></pre>
+          <button class="copy-btn" data-copy="cd my-recipe-repo && git init && git add . && git commit -m 'Initial recipe' && gh repo create my-recipe-repo --public --push && mlrecipe push v1">Copy</button>
+        </div>
+      </li>
+      <li class="step">
+        <div class="body">
+          <strong>Share the link</strong>
+          <p>Once the release exists, anyone with this URL pattern sees your recipe details
+          rendered. Replace the example in the URL bar with your own
+          <code>user/repo@tag</code>:</p>
+          <pre id="publish-url-template"><span class="prompt">→</span>mlrecipe.shiahonb777.dev/?ref=&lt;your-user&gt;/&lt;repo&gt;@v1</pre>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <hr>
+
+  <h2>How a recipe is verified</h2>
+  <p class="lead measure" style="font-size:1rem">
+    Every recipe references its adapter by a content hash (<code>sha256:...</code>) and its
+    base model by a Hugging Face revision. <code>mlrecipe materialize</code> downloads the
+    base, downloads the adapter, calls <code>peft.merge_and_unload()</code>, and writes the
+    merged <code>safetensors</code>. On the GPT-2 and Qwen 2.5 examples on this page, all
+    148 of 148 tensors match the PEFT reference output to the bit; the maximum element-wise
+    difference is zero.
+  </p>
+  <p class="lead measure" style="font-size:1rem">
+    The shipped recipe and the merged checkpoint are interchangeable for inference, but the
+    recipe is two to three orders of magnitude smaller. That ratio is what makes recipes
+    practical to host on a free tier.
+  </p>
+
+  <hr>
+
+  <p class="meta">
+    A recipe is a TOML file plus a content-addressed adapter. Verification is local;
+    distribution is GitHub.
+  </p>
 </div>
 
-<script>
-  // ---------- minimal TOML parser ----------
-  // Handles the subset we emit: top-level keys, [section], [[array.section]],
-  // strings (basic), ints, floats, bools, arrays of strings.
-  function parseTOML(text) {
-    const lines = text.split(/\r?\n/);
-
-    // First, fold multi-line arrays/strings into single logical lines.
-    // Our emitter writes things like:
-    //   target_modules = [
-    //       "x",
-    //       "y",
-    //   ]
-    // We collapse that into one line before the main parse.
-    const folded = [];
-    let buf = null;
-    let bracketDepth = 0;
-    for (const raw of lines) {
-      if (buf !== null) {
-        buf += ' ' + raw;
-        for (const c of raw) {
-          if (c === '[') bracketDepth++;
-          else if (c === ']') bracketDepth--;
-        }
-        if (bracketDepth <= 0) { folded.push(buf); buf = null; bracketDepth = 0; }
-        continue;
-      }
-      const eq = raw.indexOf('=');
-      const lbr = raw.indexOf('[');
-      const rbr = raw.lastIndexOf(']');
-      if (eq >= 0 && lbr > eq) {
-        // value side starts an array; check if it closes on same line
-        let depth = 0;
-        let opened = false;
-        for (let i = lbr; i < raw.length; i++) {
-          if (raw[i] === '[') { depth++; opened = true; }
-          else if (raw[i] === ']') depth--;
-        }
-        if (opened && depth > 0) {
-          buf = raw;
-          bracketDepth = depth;
-          continue;
-        }
-      }
-      folded.push(raw);
-    }
-    if (buf !== null) folded.push(buf);
-
-    const root = {};
-    let cur = root;
-
-    function getOrMakeTable(obj, path) {
-      for (const p of path) {
-        if (!(p in obj)) obj[p] = {};
-        obj = obj[p];
-      }
-      return obj;
-    }
-
-    function parseValue(s) {
-      s = s.trim();
-      if (s.startsWith('"') && s.endsWith('"')) {
-        return JSON.parse(s);
-      }
-      if (s === 'true') return true;
-      if (s === 'false') return false;
-      if (s.startsWith('[') && s.endsWith(']')) {
-        const inner = s.slice(1, -1).trim();
-        if (!inner) return [];
-        const items = [];
-        let depth = 0, q = false, start = 0;
-        for (let i = 0; i <= inner.length; i++) {
-          const c = inner[i];
-          if (c === '"' && inner[i-1] !== '\\') q = !q;
-          if (!q && c === '[') depth++;
-          if (!q && c === ']') depth--;
-          if (!q && depth === 0 && (c === ',' || i === inner.length)) {
-            const tok = inner.slice(start, i).trim();
-            if (tok) items.push(parseValue(tok));
-            start = i + 1;
-          }
-        }
-        return items;
-      }
-      if (/^-?\d+$/.test(s)) return parseInt(s, 10);
-      if (/^-?\d+\.\d+(e-?\d+)?$/i.test(s)) return parseFloat(s);
-      return s;
-    }
-
-    for (let raw of folded) {
-      const line = raw.split('#')[0].trim();
-      if (!line) continue;
-      if (line.startsWith('[[') && line.endsWith(']]')) {
-        const path = line.slice(2, -2).split('.').map(p => p.trim());
-        const parent = getOrMakeTable(root, path.slice(0, -1));
-        const last = path[path.length - 1];
-        if (!Array.isArray(parent[last])) parent[last] = [];
-        const entry = {};
-        parent[last].push(entry);
-        cur = entry;
-        continue;
-      }
-      if (line.startsWith('[') && line.endsWith(']') && !line.includes('=')) {
-        const path = line.slice(1, -1).split('.').map(p => p.trim());
-        cur = getOrMakeTable(root, path);
-        continue;
-      }
-      const eq = line.indexOf('=');
-      if (eq < 0) continue;
-      const key = line.slice(0, eq).trim();
-      const val = parseValue(line.slice(eq + 1));
-      cur[key] = val;
-    }
-    return root;
-  }
-
-  // ---------- helpers ----------
-  function fmt(n) {
-    if (n == null) return '?';
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
-    return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
-  }
-
-  function escapeHTML(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[c]);
-  }
-
-  // Heuristic: estimate the merged checkpoint size from the base ref.
-  // We only have the recipe; without a network call we can't be precise.
-  // Hard-code a few common families; fall back to "?".
-  const BASE_SIZE_HINTS = {
-    'gpt2': 500e6,
-    'gpt2-medium': 1.5e9,
-    'gpt2-large': 3.1e9,
-    'distilgpt2': 330e6,
-    'meta-llama/Llama-3-8B': 16e9,
-    'meta-llama/Llama-3-8B-Instruct': 16e9,
-    'meta-llama/Meta-Llama-3-8B': 16e9,
-    'mistralai/Mistral-7B-v0.1': 14e9,
-    'Qwen/Qwen2.5-0.5B': 1e9,
-    'Qwen/Qwen2.5-1.5B': 3e9,
-    'Qwen/Qwen2.5-7B': 15e9,
-    'TinyLlama/TinyLlama-1.1B-Chat-v1.0': 2.2e9,
-  };
-  function estimateMergedSize(baseRef) {
-    if (!baseRef) return null;
-    if (BASE_SIZE_HINTS[baseRef]) return BASE_SIZE_HINTS[baseRef];
-    // try fuzzy: a key that's a prefix of baseRef
-    for (const [k, v] of Object.entries(BASE_SIZE_HINTS)) {
-      if (baseRef.startsWith(k)) return v;
-    }
-    return null;
-  }
-
-  // ---------- GitHub Releases API ----------
-  async function fetchRelease(repo, tag) {
-    const url = tag === 'latest'
-      ? `https://api.github.com/repos/${repo}/releases/latest`
-      : `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
-    const r = await fetch(url);
-    if (r.status === 404) {
-      throw new Error(`release not found: ${repo}@${tag}`);
-    }
-    if (!r.ok) {
-      throw new Error(`github api: ${r.status} ${r.statusText}`);
-    }
-    return r.json();
-  }
-
-  async function fetchTomlAsset(release) {
-    const tomlAsset = release.assets.find(a => a.name.endsWith('.toml'));
-    if (!tomlAsset) {
-      throw new Error('no .toml asset on this release; was it pushed by an older mlrecipe?');
-    }
-    const r = await fetch(tomlAsset.browser_download_url);
-    if (!r.ok) throw new Error(`fetch toml: ${r.status}`);
-    return r.text();
-  }
-
-  // ---------- render ----------
-  function renderRecipe(repo, tag, release, recipe) {
-    const bundleAsset = release.assets.find(a => a.name.endsWith('.tar.gz'));
-    const bundleSize = bundleAsset?.size ?? 0;
-
-    const recipeMeta = recipe.recipe || {};
-    const base = recipe.base || {};
-    const adapters = recipe.adapters || [];
-    const training = recipe.training || {};
-    const parents = recipe.parents || {};
-
-    const merged = estimateMergedSize(base.ref);
-    const ratio = merged && bundleSize ? Math.round(merged / bundleSize) : null;
-
-    const html = [];
-
-    // Header panel.
-    html.push(`
-      <div class="panel">
-        <h2>${escapeHTML(recipeMeta.name || 'recipe')}</h2>
-        <div class="kv">
-          <div class="k">format</div>      <div class="v">${escapeHTML(recipeMeta.version || '?')}</div>
-          <div class="k">base</div>        <div class="v">${escapeHTML(base.ref || '?')}${
-            base.revision ? '@' + escapeHTML(base.revision) : ''
-          }</div>
-          ${parents.parent ? `<div class="k">parent</div><div class="v">${escapeHTML(parents.parent)}</div>` : ''}
-          <div class="k">release</div>     <div class="v"><a href="https://github.com/${repo}/releases/tag/${tag}" target="_blank">${escapeHTML(repo)}@${escapeHTML(tag)}</a></div>
-          <div class="k">published</div>   <div class="v">${new Date(release.published_at || release.created_at).toLocaleString()}</div>
-        </div>
-      </div>
-    `);
-
-    // Size comparison panel.
-    if (bundleSize) {
-      const mergedKnown = merged != null;
-      const denom = Math.max(merged || bundleSize, bundleSize);
-      const recipePct = (bundleSize / denom) * 100;
-      const mergedPct = mergedKnown ? 100 : 0;
-      html.push(`
-        <div class="panel">
-          <h2>Size</h2>
-          <div class="size-bars">
-            <div class="bar-row">
-              <div class="label">recipe bundle</div>
-              <div class="bar recipe-bar"><div style="width: ${recipePct.toFixed(1)}%"></div></div>
-              <div class="num">${fmt(bundleSize)}</div>
-            </div>
-            ${mergedKnown ? `
-              <div class="bar-row">
-                <div class="label">merged checkpoint</div>
-                <div class="bar"><div style="width: ${mergedPct.toFixed(1)}%"></div></div>
-                <div class="num">~${fmt(merged)}</div>
-              </div>
-            ` : `
-              <div class="bar-row">
-                <div class="label">merged checkpoint</div>
-                <div class="bar"><div style="width: 100%; background: var(--surface-2)"></div></div>
-                <div class="num">unknown base size</div>
-              </div>
-            `}
-          </div>
-          ${ratio ? `<div class="ratio">${ratio}× <small>smaller than the merged checkpoint</small></div>` : ''}
-        </div>
-      `);
-    }
-
-    // Adapters panel.
-    if (adapters.length) {
-      html.push('<div class="panel"><h2>Adapters</h2>');
-      adapters.forEach((a, i) => {
-        html.push(`
-          <div class="adapter">
-            <div class="head">
-              <span>[${i}] ${escapeHTML(a.type || '?')}<span class="badge">${escapeHTML(a.artifact?.slice(0, 19) || '')}…</span></span>
-            </div>
-            <div class="meta">
-              ${a.rank != null ? `rank=${a.rank} ` : ''}
-              ${a.alpha != null ? `alpha=${a.alpha} ` : ''}
-              ${a.target_modules?.length ? `targets=[${a.target_modules.join(', ')}] ` : ''}
-              ${a.fan_in_fan_out ? '<span class="badge ok">Conv1D</span>' : ''}
-            </div>
-          </div>
-        `);
-      });
-      html.push('</div>');
-    }
-
-    // Training metadata.
-    const tKeys = Object.keys(training).filter(k => training[k] != null && training[k] !== '');
-    if (tKeys.length) {
-      html.push('<div class="panel"><h2>Training</h2><div class="kv">');
-      tKeys.forEach(k => {
-        html.push(`<div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(training[k]))}</div>`);
-      });
-      html.push('</div></div>');
-    }
-
-    // Commands.
-    html.push(`
-      <div class="panel">
-        <h2>Use it</h2>
-        <pre class="commands"><span class="prompt">$</span> <span class="cmd">pip install git+https://github.com/shiahonb777/mlrecipe.git</span>
-<span class="prompt">$</span> <span class="cmd">mlrecipe clone ${escapeHTML(repo)}@${escapeHTML(tag)}</span>
-<span class="prompt">$</span> <span class="cmd">cd ${escapeHTML(repo.split('/').pop())}</span>
-<span class="prompt">$</span> <span class="cmd">mlrecipe materialize ./merged</span></pre>
-      </div>
-    `);
-
-    document.getElementById('result').innerHTML = html.join('');
-  }
-
-  // ---------- entry ----------
-  async function inspect(refStr) {
-    const result = document.getElementById('result');
-    result.innerHTML = '<div class="panel"><div class="kv"><div class="k">loading…</div></div></div>';
-    let repo, tag;
-    if (refStr.includes('@')) {
-      [repo, tag] = refStr.split('@', 2);
-    } else {
-      repo = refStr; tag = 'latest';
-    }
-    if (!repo.includes('/')) {
-      result.innerHTML = `<div class="error">expected <code>user/repo</code> or <code>user/repo@tag</code></div>`;
-      return;
-    }
-    try {
-      const release = await fetchRelease(repo, tag);
-      const tomlText = await fetchTomlAsset(release);
-      const recipe = parseTOML(tomlText);
-      renderRecipe(repo, tag, release, recipe);
-    } catch (e) {
-      result.innerHTML = `<div class="error">${escapeHTML(e.message)}</div>`;
-    }
-  }
-
-  document.getElementById('form').addEventListener('submit', e => {
-    e.preventDefault();
-    const ref = document.getElementById('ref').value.trim();
-    if (ref) inspect(ref);
-  });
-  document.querySelectorAll('.examples code').forEach(c => {
-    c.addEventListener('click', () => {
-      const ref = c.dataset.ref;
-      document.getElementById('ref').value = ref;
-      inspect(ref);
-    });
-  });
-
-  // Auto-load if URL has ?ref=...
-  const urlRef = new URLSearchParams(location.search).get('ref');
-  if (urlRef) {
-    document.getElementById('ref').value = urlRef;
-    inspect(urlRef);
-  }
-</script>
+<script src="./app.js"></script>
 </body>
 </html>

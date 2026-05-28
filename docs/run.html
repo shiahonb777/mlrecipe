@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mlrecipe — run a recipe in your browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --surface:        #faf9f5;
+    --surface-sunken: #f3f1ea;
+    --text:        #141413;
+    --text-muted:  #6b6a64;
+    --text-faint:  #b0aea5;
+    --border:        #e8e6dc;
+    --border-strong: #c9c5b8;
+    --accent:       #d97757;
+    --font-head: "Poppins", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Lora", Georgia, "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--surface);
+    color: var(--text);
+    font: 400 16.5px/1.65 var(--font-body);
+    font-feature-settings: "onum";
+    min-height: 100vh;
+    padding: 56px 24px 96px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 {
+    font-family: var(--font-head);
+    font-weight: 600;
+    font-size: 2rem;
+    margin: 0 0 6px;
+    letter-spacing: -0.015em;
+  }
+  .repo {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+  .lead { font-size: 1.0625rem; line-height: 1.7; max-width: 640px; }
+  a { color: var(--text); border-bottom: 1px solid var(--border-strong); text-decoration: none; }
+  a.accent { color: var(--accent); border-bottom-color: rgba(217, 119, 87, 0.4); }
+  a:hover, a.accent:hover { border-bottom-color: var(--accent); }
+  code { font: 0.92em var(--font-mono); background: var(--surface-sunken); padding: 1px 6px; border-radius: 4px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .note {
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--text-faint);
+    padding: 14px 16px;
+    margin: 24px 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Run a recipe in the browser</h1>
+  <p class="repo"><a href="./">← back to mlrecipe</a></p>
+
+  <p class="lead">
+    The plan: download the base model and the recipe's LoRA adapter, fold the LoRA into
+    the base in JavaScript, and verify the result has the same hashes the Python
+    <code>peft.merge_and_unload()</code> path produces. Browser-side. No upload.
+  </p>
+
+  <div class="note">
+    Not yet built. The browser materialize path runs against GPT-2 sized bases (≤500 MB)
+    only, and is prototyped against <code>shiahonb777/gpt2-alpaca-recipe@v1</code>.
+    Until it ships, use the CLI:
+  </div>
+
+  <pre style="background:var(--text);color:var(--surface);padding:16px 18px;border-radius:6px;font:0.9rem var(--font-mono);overflow-x:auto;line-height:1.7"><span style="color:var(--text-faint)">$</span> pip install git+https://github.com/shiahonb777/mlrecipe.git
+<span style="color:var(--text-faint)">$</span> mlrecipe clone shiahonb777/gpt2-alpaca-recipe@v1
+<span style="color:var(--text-faint)">$</span> cd gpt2-alpaca-recipe
+<span style="color:var(--text-faint)">$</span> mlrecipe materialize ./merged</pre>
+
+  <p style="color:var(--text-muted);font-size:0.92rem;margin-top:24px">
+    For larger models — Qwen 1.5B and up — the CLI is the right tool regardless.
+    Browser memory caps out around 2 GB.
+  </p>
+
+  <hr>
+
+  <p style="color:var(--text-muted);font-size:0.875rem">
+    <a href="./">mlrecipe home</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/shiahonb777/mlrecipe">Source on GitHub</a>
+  </p>
+</div>
+</body>
+</html>
