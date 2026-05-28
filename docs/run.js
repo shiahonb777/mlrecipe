@@ -108,20 +108,22 @@ async function run(refStr) {
         switch (e.stage) {
           case "log":
             log(e.msg, e.kind);
-            // Map log markers to stages.
-            if (e.msg.startsWith("resolve release")) {
+            // Map log markers to stages. The materialize pipeline emits
+            // these messages in roughly this order; we use them to advance
+            // the staged UI.
+            if (e.msg.startsWith("try repo tree") || e.msg.startsWith("resolve release") || e.msg.startsWith("falling back")) {
               setStage("recipe", "active");
-            } else if (e.msg.startsWith("download recipe bundle")) {
+            } else if (e.msg.startsWith("download recipe bundle") || e.msg.startsWith("download adapter artifact")) {
               setStage("recipe", "done");
               setStage("bundle", "active");
               bundleStarted = true;
             } else if (e.msg.startsWith("extract bundle")) {
               setStage("bundle", "done");
-            } else if (e.msg.startsWith("recipe verified")) {
-              // recipe + bundle verified before base
+            } else if (e.msg.startsWith("recipe loaded") || e.msg.startsWith("recipe verified")) {
               setStage("recipe", "done");
               setStage("bundle", "done");
-              $("d-bundle").textContent = e.msg.replace("recipe verified: ", "");
+              const stripped = e.msg.replace(/^recipe (loaded|verified):? ?/, "");
+              if (stripped) $("d-bundle").textContent = stripped;
             } else if (e.msg.startsWith("download base model")) {
               setStage("base", "active");
               baseStarted = true;

@@ -193,10 +193,19 @@ def cmd_materialize(args: argparse.Namespace) -> int:
 def cmd_push(args: argparse.Namespace) -> int:
     """Push the current recipe to a GitHub Release.
 
-    We bundle .recipe/recipe.toml + artifacts/ into a tar.gz and attach it
-    as a release asset on the user's GitHub repo. This keeps the operator
-    cost zero (GitHub hosts the file) and the trust story simple (the user
-    sees the file under their own account).
+    Two parallel transports for the same content:
+
+    1. The .recipe/ tree (recipe.toml + artifacts/) is committed to the
+       repo's default branch. This makes the same files reachable through
+       raw.githubusercontent.com, which sends open CORS headers — needed
+       for browser-side materialize.
+
+    2. The whole .recipe/ tree is bundled into a .tar.gz and attached as
+       a release asset under the requested tag. This is what
+       `mlrecipe clone` downloads.
+
+    Both transports point at the same bytes; the SHA-256 hashes inside
+    `recipe.toml` keep the two views consistent.
     """
     import subprocess
     try:
@@ -256,6 +265,115 @@ def cmd_push(args: argparse.Namespace) -> int:
             _err(f"gh release create failed: {create.stderr.strip()}")
             return 1
     print(f"pushed: https://github.com/{repo}/releases/tag/{tag}")
+
+    # Commit the .recipe/ tree to the repo's default branch as well.
+    # This makes the same content reachable from raw.githubusercontent.com,
+    # which is needed for browser-side materialize (release-download URLs
+    # do not send CORS headers; raw.* URLs do).
+    rc = _commit_recipe_to_repo_tree(repo_dir, repo)
+    if rc != 0:
+        _err(
+            "warning: release was created, but committing .recipe/ to the repo "
+            "tree failed. The CLI ('mlrecipe clone' / 'materialize') will still work; "
+            "browser-side materialize at https://shiahonb777.github.io/mlrecipe/run.html "
+            "will not."
+        )
+        # Don't fail the whole push; the release went out fine.
+    return 0
+
+
+def _commit_recipe_to_repo_tree(repo_dir: Path, repo: str) -> int:
+    """Mirror the local .recipe/ contents into the named GitHub repo's
+    default branch via a transient clone, commit, push.
+
+    `repo_dir` is the local .recipe/ directory.
+    `repo` is "user/repo" — the GitHub repo we just pushed a release to.
+
+    Returns 0 on success, nonzero if anything went wrong; the caller
+    decides whether to treat that as fatal.
+    """
+    import subprocess
+    import tempfile
+    import shutil
+
+    print(f"mirroring .recipe/ into {repo} default branch")
+    # Look at recipe.toml + artifacts/ (the things we want to land in the
+    # repo tree). Other files in repo_dir (HEAD, etc.) are local-only state.
+    files_to_copy = []
+    if (repo_dir / "recipe.toml").is_file():
+        files_to_copy.append(("recipe.toml", repo_dir / "recipe.toml"))
+    artifacts_dir = repo_dir / "artifacts"
+    if artifacts_dir.is_dir():
+        for f in artifacts_dir.rglob("*"):
+            if f.is_file():
+                rel = f.relative_to(repo_dir)
+                files_to_copy.append((str(rel), f))
+    if not files_to_copy:
+        _err("nothing to mirror (no recipe.toml or artifacts/)")
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix=".mlrecipe-mirror-") as td:
+        td = Path(td) / "clone"
+        # Clone via SSH; the user's existing SSH auth is what `mlrecipe push`
+        # already relies on through `gh`. (gh's https flow works too, but the
+        # release path uses gh, and it's reasonable to assume SSH for git push.)
+        clone_url = f"git@github.com:{repo}.git"
+        clone = subprocess.run(
+            ["git", "clone", "--depth", "1", clone_url, str(td)],
+            capture_output=True, text=True,
+        )
+        if clone.returncode != 0:
+            _err(f"git clone failed: {clone.stderr.strip()}")
+            return 1
+        # Prepare .recipe/ inside the clone.
+        target = td / ".recipe"
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
+        for rel, src in files_to_copy:
+            dst = target / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        # git add + diff check.
+        subprocess.run(["git", "add", ".recipe"], cwd=td, check=True)
+        diff = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=td,
+        )
+        if diff.returncode == 0:
+            print("  .recipe/ in repo tree already up to date")
+            return 0
+        # Commit + push. Use the project's no-reply identity if user.email
+        # is unset locally, so we don't accidentally bake personal email
+        # into commits.
+        env_args = []
+        # Check whether user.email and user.name are configured.
+        u_email = subprocess.run(
+            ["git", "config", "user.email"], cwd=td, capture_output=True, text=True,
+        ).stdout.strip()
+        u_name = subprocess.run(
+            ["git", "config", "user.name"], cwd=td, capture_output=True, text=True,
+        ).stdout.strip()
+        if not u_email:
+            env_args += ["-c", "user.email=mlrecipe@users.noreply.github.com"]
+        if not u_name:
+            env_args += ["-c", "user.name=mlrecipe"]
+        commit = subprocess.run(
+            ["git", *env_args, "commit", "-m",
+             "Update .recipe/ tree (mlrecipe push)"],
+            cwd=td, capture_output=True, text=True,
+        )
+        if commit.returncode != 0:
+            _err(f"git commit failed: {commit.stderr.strip()}")
+            return 1
+        push = subprocess.run(
+            ["git", "push"],
+            cwd=td, capture_output=True, text=True,
+        )
+        if push.returncode != 0:
+            _err(f"git push failed: {push.stderr.strip()}")
+            return 1
+    print("  .recipe/ mirrored to repo tree")
     return 0
 
 

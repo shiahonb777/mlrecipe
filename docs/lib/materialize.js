@@ -143,6 +143,39 @@ async function fetchWithProgress(url, label, onProgress) {
   return out;
 }
 
+// CORS bypass for github.com/.../releases/download/... — that origin
+// does not send Access-Control-Allow-Origin and there is no GitHub API
+// way to opt in. We route the request through a free CORS proxy. If
+// the proxy is ever down, the page still works for any recipe whose
+// artifacts are committed to the repo tree (which we fetch directly
+// from raw.githubusercontent.com, which DOES send open CORS headers).
+const CORS_PROXY = "https://corsproxy.io/?";
+function needsCorsProxy(url) {
+  const u = new URL(url);
+  return u.hostname === "github.com" && u.pathname.includes("/releases/download/");
+}
+function viaCorsProxy(url) {
+  return CORS_PROXY + encodeURIComponent(url);
+}
+async function fetchSmart(url, label, onProgress) {
+  // If the URL is a known CORS-blocked origin, go straight to the proxy.
+  // Otherwise try direct first; on a TypeError (the only way browser CORS
+  // surfaces in user code), retry through the proxy.
+  if (needsCorsProxy(url)) {
+    onProgress?.({ stage: "log", msg: `routing release download through corsproxy.io (GitHub release CORS workaround)`, kind: "info" });
+    return fetchWithProgress(viaCorsProxy(url), label, onProgress);
+  }
+  try {
+    return await fetchWithProgress(url, label, onProgress);
+  } catch (e) {
+    if (e instanceof TypeError) {
+      onProgress?.({ stage: "log", msg: `direct fetch blocked, retrying through corsproxy.io: ${url}`, kind: "warn" });
+      return await fetchWithProgress(viaCorsProxy(url), label, onProgress);
+    }
+    throw e;
+  }
+}
+
 async function sha256Hex(bytes) {
   const buf = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -150,45 +183,110 @@ async function sha256Hex(bytes) {
 
 /**
  * The whole thing.
+ *
+ * Strategy:
+ *   1. Try to fetch the recipe directly from the repo tree at
+ *      raw.githubusercontent.com/<repo>/<branch>/.recipe/. This is
+ *      the path that ALWAYS sends open CORS headers, and is what
+ *      'mlrecipe push' commits since we added the
+ *      'commit recipe to repo tree' patch.
+ *   2. If the repo tree doesn't have a .recipe/ directory (older
+ *      releases, before that patch), fall back to the release tar.gz.
+ *      Github.com release downloads do NOT send CORS headers, so this
+ *      path needs the user to enable a CORS proxy or run from a CLI.
  */
 export async function materializeRecipe({ repo, tag, onProgress = () => {} }) {
   const log = (msg, kind = "info") => onProgress({ stage: "log", msg, kind });
 
-  // 1. Resolve the GitHub release for repo@tag.
-  log(`resolve release ${repo}@${tag}`);
-  const releaseURL = tag === "latest"
-    ? `https://api.github.com/repos/${repo}/releases/latest`
-    : `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
-  const relRes = await fetch(releaseURL, { headers: { Accept: "application/vnd.github+json" } });
-  if (!relRes.ok) throw new Error(`fetch release: HTTP ${relRes.status}`);
-  const release = await relRes.json();
-  const bundleAsset = release.assets.find((a) => a.name.endsWith(".tar.gz"));
-  if (!bundleAsset) throw new Error("no .tar.gz asset on release; was it pushed by mlrecipe?");
-
-  // 2. Fetch and unpack the recipe bundle.
-  log(`download recipe bundle (${(bundleAsset.size / 1e6).toFixed(2)} MB)`);
-  const bundleBytes = await fetchWithProgress(
-    bundleAsset.browser_download_url,
-    "recipe bundle",
-    (p) => onProgress({ stage: "fetch", ...p }),
-  );
-  log(`extract bundle`);
-  const entries = await extractTarGz(bundleBytes);
+  // 1. Try the repo tree first. We don't know which branch the recipe
+  // lives on a priori; try the common ones in order, plus the requested
+  // tag (which could be a branch or a tag — Git supports both as refs).
+  const branchCandidates = [tag === "latest" ? null : tag, "main", "master"]
+    .filter(Boolean);
   let recipeToml = null;
-  const artifactsByHash = new Map(); // sha hex (without "sha256:") -> Uint8Array
-  for (const e of entries) {
-    if (e.name.endsWith("recipe.toml")) {
-      recipeToml = new TextDecoder().decode(e.bytes);
-    } else if (e.name.includes("/artifacts/") && e.bytes.byteLength > 0) {
-      const fname = e.name.split("/").pop();
-      // Filename IS the hash (sha256 hex; 64 chars).
-      if (/^[0-9a-f]{64}$/.test(fname)) {
-        artifactsByHash.set(fname, e.bytes);
+  let adapterBytes = null;
+  let usedBranch = null;
+  let recipe = null;
+
+  for (const branch of branchCandidates) {
+    log(`try repo tree at ${branch}`);
+    const tomlURL = `https://raw.githubusercontent.com/${repo}/${branch}/.recipe/recipe.toml`;
+    try {
+      const tomlRes = await fetch(tomlURL);
+      if (!tomlRes.ok) continue;
+      const tomlText = await tomlRes.text();
+      const candidate = parseTOML(tomlText);
+      if (!candidate.recipe || !candidate.base) continue;
+
+      // Resolve adapter from .recipe/artifacts/<aa>/<full-hash>.
+      const adapter0 = (candidate.adapters || [])[0];
+      if (!adapter0?.artifact) continue;
+      const hash = adapter0.artifact.replace(/^sha256:/, "");
+      if (!/^[0-9a-f]{64}$/.test(hash)) continue;
+      const artifactURL = `https://raw.githubusercontent.com/${repo}/${branch}/.recipe/artifacts/${hash.slice(0, 2)}/${hash}`;
+      log(`download adapter artifact (${hash.slice(0, 16)}…)`);
+      const artBytes = await fetchSmart(
+        artifactURL,
+        "recipe artifact",
+        (p) => onProgress({ stage: "fetch", ...p, label: "recipe bundle" }),
+      );
+      // Verify the hash to make sure we got the right file.
+      const gotHash = await sha256Hex(artBytes);
+      if (gotHash !== hash) {
+        throw new Error(`adapter hash mismatch: expected ${hash}, got ${gotHash}`);
       }
+      recipeToml = tomlText;
+      adapterBytes = artBytes;
+      recipe = candidate;
+      usedBranch = branch;
+      log(`recipe loaded from ${repo}@${branch} (.recipe tree)`);
+      break;
+    } catch (e) {
+      // Not on this branch; try the next.
     }
   }
-  if (!recipeToml) throw new Error("recipe.toml missing from bundle");
-  const recipe = parseTOML(recipeToml);
+
+  // 2. Fall back to the release tar.gz if the repo tree didn't have it.
+  if (!recipe) {
+    log(`falling back to GitHub release ${repo}@${tag}`);
+    const releaseURL = tag === "latest"
+      ? `https://api.github.com/repos/${repo}/releases/latest`
+      : `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
+    const relRes = await fetch(releaseURL, { headers: { Accept: "application/vnd.github+json" } });
+    if (!relRes.ok) throw new Error(`fetch release: HTTP ${relRes.status}`);
+    const release = await relRes.json();
+    const bundleAsset = release.assets.find((a) => a.name.endsWith(".tar.gz"));
+    if (!bundleAsset) throw new Error("no .tar.gz asset on release; was it pushed by mlrecipe?");
+
+    log(`download recipe bundle (${(bundleAsset.size / 1e6).toFixed(2)} MB)`);
+    const bundleBytes = await fetchSmart(
+      bundleAsset.browser_download_url,
+      "recipe bundle",
+      (p) => onProgress({ stage: "fetch", ...p }),
+    );
+    log(`extract bundle`);
+    const entries = await extractTarGz(bundleBytes);
+    const artifactsByHash = new Map();
+    for (const e of entries) {
+      if (e.name.endsWith("recipe.toml")) {
+        recipeToml = new TextDecoder().decode(e.bytes);
+      } else if (e.name.includes("/artifacts/") && e.bytes.byteLength > 0) {
+        const fname = e.name.split("/").pop();
+        if (/^[0-9a-f]{64}$/.test(fname)) artifactsByHash.set(fname, e.bytes);
+      }
+    }
+    if (!recipeToml) throw new Error("recipe.toml missing from bundle");
+    recipe = parseTOML(recipeToml);
+    const adapter0 = (recipe.adapters || [])[0];
+    if (!adapter0?.artifact) throw new Error("adapter has no artifact hash");
+    const hash = adapter0.artifact.replace(/^sha256:/, "");
+    adapterBytes = artifactsByHash.get(hash);
+    if (!adapterBytes) {
+      throw new Error(`bundle is missing artifact ${hash}; corrupted bundle`);
+    }
+  }
+
+  // Validate.
   const baseRef = recipe.base?.ref;
   if (!baseRef) throw new Error("recipe.base.ref missing");
   const adapters = recipe.adapters || [];
@@ -197,12 +295,6 @@ export async function materializeRecipe({ repo, tag, onProgress = () => {} }) {
     log(`recipe stacks ${adapters.length} adapters; this browser path only supports one`, "warn");
   }
   const adapter = adapters[0];
-  const artifactHash = (adapter.artifact || "").replace(/^sha256:/, "");
-  if (!artifactHash) throw new Error("adapter has no artifact hash");
-  const adapterBytes = artifactsByHash.get(artifactHash);
-  if (!adapterBytes) {
-    throw new Error(`bundle is missing artifact ${artifactHash}; the bundle may be corrupted`);
-  }
   log(`recipe verified: ${recipe.recipe?.name || "?"} (base: ${baseRef})`);
 
   // 3. Fetch the base model from Hugging Face.
@@ -215,7 +307,7 @@ export async function materializeRecipe({ repo, tag, onProgress = () => {} }) {
   }
   const baseURL = HF_RESOLVE(baseRef, recipe.base?.revision, baseInfo.file);
   log(`download base model ${baseRef} (~${(baseInfo.approxBytes / 1e6).toFixed(0)} MB)`);
-  const baseBytes = await fetchWithProgress(
+  const baseBytes = await fetchSmart(
     baseURL, "base model",
     (p) => onProgress({ stage: "fetch", ...p }),
   );
